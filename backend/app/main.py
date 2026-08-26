@@ -1,0 +1,100 @@
+"""ID-SHIELD API entrypoint."""
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+from app.api import (
+    routes_analysis,
+    routes_cases,
+    routes_comparison,
+    routes_dashboard,
+    routes_demo,
+    routes_forensics,
+    routes_health,
+    routes_risk,
+    routes_report,
+)
+from app.core.config import settings
+from app.core.logging import configure_logging, get_logger
+from app.db.base import init_db
+
+configure_logging()
+log = get_logger("idshield.main")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    log.info("APPLICATION_STARTED | db=%s", settings.database_url.split("///")[-1])
+    yield
+
+
+app = FastAPI(
+    title=settings.app_name,
+    description=(
+        "Explainable identity & document forensics platform. "
+        "Prototype for assisted verification - final decisions remain with "
+        "authorized human personnel."
+    ),
+    version=settings.app_version,
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origin_list,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["*"],
+)
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):  # noqa: ANN001, ANN201
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
+
+app.include_router(routes_health.router, prefix="/api", tags=["system"])
+app.include_router(routes_dashboard.router, prefix="/api", tags=["dashboard"])
+app.include_router(routes_cases.router, prefix="/api", tags=["cases"])
+app.include_router(routes_analysis.router, prefix="/api", tags=["analysis"])
+app.include_router(routes_comparison.router, prefix="/api", tags=["comparison"])
+app.include_router(routes_forensics.router, prefix="/api", tags=["forensics"])
+app.include_router(routes_risk.router, prefix="/api", tags=["risk"])
+app.include_router(routes_report.router, prefix="/api", tags=["report"])
+app.include_router(routes_demo.router, prefix="/api", tags=["demo"])
+
+# ---- Production single-origin hosting -------------------------------------
+# When the frontend has been built (npm run build), serve it from this app
+# so a single process/host serves UI + API. In dev, Vite serves the UI on
+# :5173 and proxies /api here instead.
+_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+_DIST = _DIST.resolve()
+
+if _DIST.is_dir():
+    app.mount(
+        "/assets",
+        StaticFiles(directory=_DIST / "assets"),
+        name="spa-assets",
+    )
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):  # noqa: ANN201
+        if full_path.startswith("api/"):
+            return FileResponse(_DIST / "index.html", status_code=404)
+        candidate = (_DIST / full_path).resolve()
+        if full_path and candidate.is_file() and str(candidate).startswith(str(_DIST)):
+            return FileResponse(candidate)
+        return FileResponse(_DIST / "index.html")
+
+    log.info("SPA_SERVED | dir=%s", _DIST)
