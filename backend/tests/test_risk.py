@@ -162,7 +162,7 @@ def test_config_is_valid_and_complete():
 def test_field_to_factor_mapping_complete_for_known_fields():
     known_fields = {
         "date_of_birth", "full_name", "document_number", "address",
-        "gender", "nationality",
+        "gender", "nationality", "facial_photo",
     }
     mapped = set(risk_engine._FIELD_FACTOR.keys())
     assert known_fields == mapped

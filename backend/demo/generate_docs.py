@@ -57,15 +57,57 @@ def _font(size: int, bold: bool = False, mono: bool = False):
 
 def _draw_photo(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], initials: str) -> None:
     x0, y0, x1, y1 = box
-    draw.rectangle([x0, y0, x1, y1], fill=_LIGHT, outline=(90, 90, 90), width=2)
-    f = _font(44, bold=True)
-    tw = draw.textlength(initials, font=f)
-    draw.text(
-        ((x0 + x1 - tw) / 2, (y0 + y1) / 2 - 26),
-        initials,
-        fill=(70, 70, 70),
-        font=f,
-    )
+    bw = x1 - x0
+    bh = y1 - y0
+    # Clean background for ID photo
+    draw.rectangle([x0, y0, x1, y1], fill=(225, 235, 245), outline=(100, 116, 139), width=2)
+
+    cx = (x0 + x1) // 2
+    cy = (y0 + y1) // 2
+
+    # Shoulders / Torso (suit / shirt)
+    draw.ellipse([cx - int(bw * 0.45), y1 - int(bh * 0.45), cx + int(bw * 0.45), y1 + int(bh * 0.35)], fill=(30, 58, 110))
+    # Shirt collar (V-neck)
+    draw.polygon([(cx - int(bw * 0.12), y1 - int(bh * 0.28)), (cx + int(bw * 0.12), y1 - int(bh * 0.28)), (cx, y1 - int(bh * 0.15))], fill=(255, 255, 255))
+
+    # Neck
+    neck_w = int(bw * 0.14)
+    draw.rectangle([cx - neck_w, cy + int(bh * 0.05), cx + neck_w, y1 - int(bh * 0.25)], fill=(235, 195, 165))
+
+    # Head (oval)
+    head_w = int(bw * 0.28)
+    head_h = int(bh * 0.36)
+    head_y = cy - int(bh * 0.08)
+    draw.ellipse([cx - head_w, head_y - head_h, cx + head_w, head_y + head_h], fill=(245, 205, 175), outline=(210, 170, 140), width=1)
+
+    # Hair
+    draw.chord([cx - head_w - 2, head_y - head_h - 4, cx + head_w + 2, head_y - int(head_h * 0.1)], start=180, end=360, fill=(35, 30, 30))
+
+    # Eyes & Eyebrows
+    eye_offset_x = int(head_w * 0.45)
+    eye_y = head_y - int(head_h * 0.12)
+    # Eyebrows
+    draw.line([cx - eye_offset_x - 6, eye_y - 8, cx - eye_offset_x + 6, eye_y - 8], fill=(30, 25, 25), width=2)
+    draw.line([cx + eye_offset_x - 6, eye_y - 8, cx + eye_offset_x + 6, eye_y - 8], fill=(30, 25, 25), width=2)
+    # Eyes
+    draw.ellipse([cx - eye_offset_x - 4, eye_y - 3, cx - eye_offset_x + 4, eye_y + 3], fill=(255, 255, 255))
+    draw.ellipse([cx - eye_offset_x - 2, eye_y - 2, cx - eye_offset_x + 2, eye_y + 2], fill=(40, 30, 20))
+    draw.ellipse([cx + eye_offset_x - 4, eye_y - 3, cx + eye_offset_x + 4, eye_y + 3], fill=(255, 255, 255))
+    draw.ellipse([cx + eye_offset_x - 2, eye_y - 2, cx + eye_offset_x + 2, eye_y + 2], fill=(40, 30, 20))
+
+    # Nose
+    nose_y = head_y + int(head_h * 0.15)
+    draw.polygon([(cx, eye_y + 4), (cx - 3, nose_y), (cx + 3, nose_y)], fill=(225, 185, 155))
+
+    # Mouth
+    mouth_y = head_y + int(head_h * 0.45)
+    draw.arc([cx - 10, mouth_y - 4, cx + 10, mouth_y + 4], start=10, end=170, fill=(180, 80, 80), width=2)
+
+    # Initials badge in bottom corner
+    if initials:
+        bf = _font(16, bold=True)
+        draw.rounded_rectangle([x1 - 36, y1 - 24, x1 - 4, y1 - 4], radius=4, fill=(15, 23, 42))
+        draw.text((x1 - 32, y1 - 22), initials, fill=(255, 255, 255), font=bf)
 
 
 def _add_qr(img: Image.Image, payload: dict, box: tuple[int, int], box_size: int = 3) -> None:
