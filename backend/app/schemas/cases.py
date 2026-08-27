@@ -6,6 +6,10 @@ from pydantic import BaseModel, Field
 
 class CaseCreate(BaseModel):
     case_name: str = Field(min_length=1, max_length=200)
+    applicant_name: str | None = None
+    applicant_phone: str | None = None
+    applicant_email: str | None = None
+    auto_notify_on_mismatch: bool = False
 
 
 class DocumentOut(BaseModel):
@@ -40,6 +44,10 @@ class CaseOut(BaseModel):
     overall_risk: int | None
     recommendation: str | None
     person_name: str | None
+    applicant_name: str | None = None
+    applicant_phone: str | None = None
+    applicant_email: str | None = None
+    auto_notify_on_mismatch: bool = False
     document_count: int
     created_at: datetime
     documents: list[DocumentOut] | None = None
@@ -53,7 +61,11 @@ class CaseOut(BaseModel):
             status=case.status,
             overall_risk=case.overall_risk,
             recommendation=case.recommendation,
-            person_name=person_name,
+            person_name=person_name or getattr(case, "applicant_name", None),
+            applicant_name=getattr(case, "applicant_name", None),
+            applicant_phone=getattr(case, "applicant_phone", None),
+            applicant_email=getattr(case, "applicant_email", None),
+            auto_notify_on_mismatch=bool(getattr(case, "auto_notify_on_mismatch", False)),
             document_count=len(case.documents),
             created_at=case.created_at,
             documents=[DocumentOut.from_model(d) for d in case.documents] if include_documents else None,
@@ -65,6 +77,10 @@ class CaseCreated(BaseModel):
     case_number: int
     case_name: str
     status: str
+    applicant_name: str | None = None
+    applicant_phone: str | None = None
+    applicant_email: str | None = None
+    auto_notify_on_mismatch: bool = False
 
 
 class UploadResult(BaseModel):

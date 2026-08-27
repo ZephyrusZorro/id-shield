@@ -54,6 +54,10 @@ export interface CaseDetail {
   status: string;
   overall_risk: number | null;
   recommendation: string | null;
+  applicant_name?: string | null;
+  applicant_phone?: string | null;
+  applicant_email?: string | null;
+  auto_notify_on_mismatch?: boolean;
   created_at: string;
   documents: DocumentItem[];
 }
@@ -376,4 +380,52 @@ export interface AnalyticsResponse {
   stage_latencies: StageLatencyStat[];
   insights: IntelligenceInsight[];
   is_synthetic_baseline: boolean;
+}
+
+export interface DiscrepancyItem {
+  field_name: string;
+  label: string;
+  severity: "info" | "low" | "medium" | "high";
+  explanation: string;
+  documents_involved: string[];
+}
+
+export interface NotificationPreviewResponse {
+  case_id: string;
+  case_number: number;
+  case_name: string;
+  applicant_name: string | null;
+  applicant_phone: string | null;
+  applicant_email: string | null;
+  mismatches: DiscrepancyItem[];
+  has_discrepancies: boolean;
+  suggested_subject: string;
+  sms_preview: string;
+  whatsapp_preview: string;
+  email_preview: string;
+  email_configured?: boolean;
+  sms_configured?: boolean;
+  whatsapp_configured?: boolean;
+}
+
+export interface NotificationSendRequest {
+  channel: "sms" | "whatsapp" | "email" | "webhook";
+  recipient: string;
+  subject?: string | null;
+  message: string;
+  mismatch_fields?: string[];
+}
+
+export interface NotificationOut {
+  id: string;
+  case_id: string;
+  recipient: string;
+  channel: "sms" | "whatsapp" | "email" | "webhook";
+  subject?: string | null;
+  message: string;
+  mismatch_fields: string[];
+  status: "sent" | "delivered" | "simulated" | "failed";
+  trigger_type: "manual" | "automatic";
+  created_at: string;
+  provider_info?: Record<string, any> | null;
 }

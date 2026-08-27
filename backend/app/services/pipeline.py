@@ -709,6 +709,14 @@ def analyze_case(case_id: str) -> None:
         case.status = "completed" if not any_error else "failed"
         db.commit()
         log_stage(log, "ANALYSIS_COMPLETED", case_id=case.id, status=case.status)
+
+        # Trigger auto-notification if enabled on the case and discrepancies/errors exist
+        if case.status in ("completed", "failed"):
+            try:
+                from app.services import notification_service
+                notification_service.trigger_auto_notification_if_enabled(db, case.id)
+            except Exception as notify_err:
+                log.warning("AUTO_NOTIFICATION_ERROR | case_id=%s err=%s", case.id, notify_err)
     except Exception:  # noqa: BLE001 - never leave the case stuck 'processing'
         log.exception("ANALYSIS_FAILED | case_id=%s", case_id)
         db.rollback()

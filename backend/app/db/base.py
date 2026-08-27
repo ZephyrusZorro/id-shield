@@ -28,6 +28,27 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
+def _migrate_schema(engine) -> None:
+    """Ensure newly added columns are present in existing SQLite/SQL tables."""
+    from sqlalchemy import text
+    try:
+        with engine.begin() as conn:
+            # Check cases table columns
+            res = conn.execute(text("PRAGMA table_info(cases)")).fetchall()
+            cols = [row[1] for row in res] if res else []
+            if cols:
+                if "applicant_name" not in cols:
+                    conn.execute(text("ALTER TABLE cases ADD COLUMN applicant_name VARCHAR(200)"))
+                if "applicant_phone" not in cols:
+                    conn.execute(text("ALTER TABLE cases ADD COLUMN applicant_phone VARCHAR(50)"))
+                if "applicant_email" not in cols:
+                    conn.execute(text("ALTER TABLE cases ADD COLUMN applicant_email VARCHAR(320)"))
+                if "auto_notify_on_mismatch" not in cols:
+                    conn.execute(text("ALTER TABLE cases ADD COLUMN auto_notify_on_mismatch BOOLEAN DEFAULT 0"))
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def init_db() -> None:
     """Create tables and ensure runtime directories exist."""
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
@@ -41,3 +62,4 @@ def init_db() -> None:
     from app.db import models  # noqa: F401  (register models)
 
     Base.metadata.create_all(bind=engine)
+    _migrate_schema(engine)

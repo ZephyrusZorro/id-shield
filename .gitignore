@@ -31,7 +31,7 @@ Thumbs.db
 .vscode/
 
 # ---- Build artifacts / stray files ----
-ID-SHIELD_*.zip
+*.zip
 MY-PROJECT
 backend/cv2/
 backend/imagehash/
