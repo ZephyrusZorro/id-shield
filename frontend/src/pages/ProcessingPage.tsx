@@ -62,6 +62,8 @@ export function ProcessingPage() {
         consecutiveErrors = 0;
         const busy =
           data.case_status === "processing" ||
+          data.case_status === "draft" ||
+          data.stages.length === 0 ||
           data.stages.some((s) => s.status === "pending" || s.status === "running");
         if (busy) timer = setTimeout(poll, POLL_MS);
       } catch (err) {
@@ -82,10 +84,12 @@ export function ProcessingPage() {
     };
   }, [caseId]);
 
-  const finished = analysis !== null && !(
-    analysis.case_status === "processing" ||
-    analysis.stages.some((s) => s.status === "pending" || s.status === "running")
-  );
+  const finished =
+    analysis !== null &&
+    analysis.stages.length > 0 &&
+    (analysis.case_status === "completed" || analysis.case_status === "failed") &&
+    !analysis.stages.some((s) => s.status === "pending" || s.status === "running");
+
 
   return (
     <div className="mx-auto max-w-2xl animate-fade-in">

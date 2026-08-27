@@ -5,13 +5,14 @@ from pathlib import Path
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf"}
 
-# Extensions we accept mapped to the only MIME types we consider plausible.
+# Extensions we accept mapped to plausible MIME types across browsers/platforms.
 _ALLOWED_MIME = {
-    ".jpg": {"image/jpeg"},
-    ".jpeg": {"image/jpeg"},
-    ".png": {"image/png"},
-    ".pdf": {"application/pdf"},
+    ".jpg": {"image/jpeg", "image/jpg", "image/pjpeg", "application/octet-stream"},
+    ".jpeg": {"image/jpeg", "image/jpg", "image/pjpeg", "application/octet-stream"},
+    ".png": {"image/png", "image/x-png", "application/octet-stream"},
+    ".pdf": {"application/pdf", "application/x-pdf", "application/acrobat", "applications/vnd.pdf", "text/pdf", "application/octet-stream"},
 }
+
 
 _UNSAFE_CHARS = re.compile(r"[^A-Za-z0-9._\- ]+")
 
