@@ -6,6 +6,8 @@ import {
   Loader2,
   AlertTriangle,
   CheckCircle2,
+  MessageSquare,
+  Send,
 } from "lucide-react";
 import { PageHeader } from "../components/layout/PageHeader";
 import { ValidationTab } from "../components/documents/ValidationTab";
@@ -13,6 +15,8 @@ import { ComparisonTab } from "../components/documents/ComparisonTab";
 import { ForensicsTab } from "../components/documents/ForensicsTab";
 import { FaceVerificationTab } from "../components/documents/FaceVerificationTab";
 import { ReportTab } from "../components/documents/ReportTab";
+import { NotificationsTab } from "../components/notifications/NotificationsTab";
+import { NotificationModal } from "../components/notifications/NotificationModal";
 import { DocImage } from "../components/documents/DocImage";
 import { useApi } from "../hooks/useApi";
 import type { RiskReport } from "../types/api";
@@ -124,6 +128,7 @@ const TABS = [
   "Face Verification",
   "Comparison",
   "Report",
+  "Notifications",
 ] as const;
 type Tab = (typeof TABS)[number];
 
@@ -291,9 +296,13 @@ export function CaseDetailPage() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("Overview");
-  const { data: caseData, loading, error } = useApi<CaseDetail>(
-    caseId ? `/api/cases/${caseId}` : null,
-  );
+  const [notificationModalOpen, setNotificationModalOpen] = useState(false);
+  const {
+    data: caseData,
+    loading,
+    error,
+    reload,
+  } = useApi<CaseDetail>(caseId ? `/api/cases/${caseId}` : null);
 
   return (
     <div className="mx-auto max-w-6xl animate-fade-in">
@@ -308,6 +317,17 @@ export function CaseDetailPage() {
       <PageHeader
         title={caseData ? `Case #${caseData.case_number} — ${caseData.case_name}` : "Case"}
         subtitle="Verification evidence workspace"
+        actions={
+          caseData && (
+            <button
+              type="button"
+              onClick={() => setNotificationModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-blue-700 transition-colors"
+            >
+              <Send size={13} /> Notify Applicant
+            </button>
+          )
+        }
       />
 
       <div className="card overflow-hidden">
@@ -416,6 +436,13 @@ export function CaseDetailPage() {
                     <button type="button" onClick={() => setTab("Face Verification")} className="btn-secondary">
                       Inspect facial biometrics
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setNotificationModalOpen(true)}
+                      className="btn-secondary text-blue-700 border-blue-200 hover:bg-blue-50/60"
+                    >
+                      <MessageSquare size={14} /> Send Discrepancy Notice
+                    </button>
                   </div>
                 </>
               ) : (
@@ -437,8 +464,27 @@ export function CaseDetailPage() {
           )}
 
           {caseData && tab === "Report" && caseId && <ReportTab caseId={caseId} />}
+
+          {caseData && tab === "Notifications" && caseId && (
+            <NotificationsTab
+              caseId={caseId}
+              caseData={caseData}
+              onRefreshCase={() => reload()}
+            />
+          )}
         </div>
       </div>
+
+      {/* Discrepancy Notification Modal */}
+      {caseId && (
+        <NotificationModal
+          caseId={caseId}
+          isOpen={notificationModalOpen}
+          onClose={() => setNotificationModalOpen(false)}
+          onSent={() => reload()}
+        />
+      )}
     </div>
   );
 }
+

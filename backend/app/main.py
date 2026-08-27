@@ -18,6 +18,7 @@ from app.api import (
     routes_faces,
     routes_forensics,
     routes_health,
+    routes_notifications,
     routes_risk,
     routes_report,
 )
@@ -74,6 +75,7 @@ app.include_router(routes_analysis.router, prefix="/api", tags=["analysis"])
 app.include_router(routes_comparison.router, prefix="/api", tags=["comparison"])
 app.include_router(routes_forensics.router, prefix="/api", tags=["forensics"])
 app.include_router(routes_faces.router, prefix="/api", tags=["faces"])
+app.include_router(routes_notifications.router, prefix="/api", tags=["notifications"])
 app.include_router(routes_risk.router, prefix="/api", tags=["risk"])
 app.include_router(routes_report.router, prefix="/api", tags=["report"])
 app.include_router(routes_demo.router, prefix="/api", tags=["demo"])

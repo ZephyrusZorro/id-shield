@@ -23,12 +23,23 @@ router = APIRouter()
 
 @router.post("/cases", response_model=CaseCreated, status_code=201)
 def create_case(payload: CaseCreate, db: Session = Depends(get_db)) -> CaseCreated:
-    case = case_service.create_case(db, payload.case_name)
+    case = case_service.create_case(
+        db=db,
+        case_name=payload.case_name,
+        applicant_name=payload.applicant_name,
+        applicant_phone=payload.applicant_phone,
+        applicant_email=payload.applicant_email,
+        auto_notify_on_mismatch=payload.auto_notify_on_mismatch,
+    )
     return CaseCreated(
         id=case.id,
         case_number=case.case_number,
         case_name=case.case_name,
         status=case.status,
+        applicant_name=case.applicant_name,
+        applicant_phone=case.applicant_phone,
+        applicant_email=case.applicant_email,
+        auto_notify_on_mismatch=bool(case.auto_notify_on_mismatch),
     )
 
 

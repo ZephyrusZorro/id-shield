@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -41,8 +41,15 @@ class Case(Base, TimestampMixin):
     # draft | processing | completed | failed
     overall_risk: Mapped[int | None] = mapped_column(Integer, nullable=True)
     recommendation: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    applicant_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    applicant_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    applicant_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    auto_notify_on_mismatch: Mapped[bool] = mapped_column(Boolean, default=False)
 
     documents: Mapped[list["Document"]] = relationship(
+        back_populates="case", cascade="all, delete-orphan"
+    )
+    notifications: Mapped[list["CaseNotification"]] = relationship(
         back_populates="case", cascade="all, delete-orphan"
     )
 
@@ -175,3 +182,23 @@ class AnalysisStage(Base):
     # pending | running | done | warning | unavailable | error
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+# ----------------------------------------------------- CaseNotification
+class CaseNotification(Base, TimestampMixin):
+    """Audit record of SMS / WhatsApp / Email discrepancy alerts sent."""
+
+    __tablename__ = "case_notifications"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"), index=True)
+    recipient: Mapped[str] = mapped_column(String(320))
+    channel: Mapped[str] = mapped_column(String(30))  # sms | whatsapp | email | webhook
+    subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    message: Mapped[str] = mapped_column(Text)
+    mismatch_fields: Mapped[list] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(30), default="sent")  # sent | delivered | simulated | failed
+    trigger_type: Mapped[str] = mapped_column(String(30), default="manual")  # manual | automatic
+    provider_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    case: Mapped[Case] = relationship(back_populates="notifications")

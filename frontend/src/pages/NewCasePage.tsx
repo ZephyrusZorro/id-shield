@@ -43,6 +43,11 @@ export function NewCasePage() {
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const [caseName, setCaseName] = useState("");
+  const [applicantName, setApplicantName] = useState("");
+  const [applicantPhone, setApplicantPhone] = useState("");
+  const [applicantEmail, setApplicantEmail] = useState("");
+  const [autoNotify, setAutoNotify] = useState(false);
+  const [showContactFields, setShowContactFields] = useState(false);
   const [files, setFiles] = useState<PendingFile[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -112,6 +117,10 @@ export function NewCasePage() {
     try {
       const created = await apiPost<CaseCreated>("/api/cases", {
         case_name: caseName.trim(),
+        applicant_name: applicantName.trim() || null,
+        applicant_phone: applicantPhone.trim() || null,
+        applicant_email: applicantEmail.trim() || null,
+        auto_notify_on_mismatch: autoNotify,
       });
       const form = new FormData();
       files.forEach((f) => form.append("files", f.file));
@@ -186,6 +195,83 @@ export function NewCasePage() {
           maxLength={200}
           onChange={(e) => setCaseName(e.target.value)}
         />
+
+        {/* Optional Applicant Contact & Discrepancy Alert Routing */}
+        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50/50 p-4 transition-all">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-100 text-blue-700 text-xs font-bold">
+                📱
+              </span>
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-navy-900">
+                  Applicant Contact &amp; Discrepancy Alerts (Optional)
+                </h4>
+                <p className="text-[11px] text-slate-500">
+                  Allows direct SMS, WhatsApp, or Email notifications to the person if discrepancies or high-risk flags are detected.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowContactFields(!showContactFields)}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-700 underline"
+            >
+              {showContactFields ? "Hide options" : "Configure contact"}
+            </button>
+          </div>
+
+          {showContactFields && (
+            <div className="mt-4 space-y-3 pt-3 border-t border-slate-200/70 animate-fade-in">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">Applicant Full Name</label>
+                  <input
+                    type="text"
+                    className="input-field mt-1 text-xs"
+                    placeholder="e.g. Rahul Sharma"
+                    value={applicantName}
+                    onChange={(e) => setApplicantName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">Mobile / WhatsApp Number</label>
+                  <input
+                    type="text"
+                    className="input-field mt-1 text-xs"
+                    placeholder="e.g. +91 98765 43210"
+                    value={applicantPhone}
+                    onChange={(e) => setApplicantPhone(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">Email Address</label>
+                  <input
+                    type="email"
+                    className="input-field mt-1 text-xs"
+                    placeholder="e.g. applicant@example.com"
+                    value={applicantEmail}
+                    onChange={(e) => setApplicantEmail(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={autoNotify}
+                    onChange={(e) => setAutoNotify(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>
+                    <strong>Auto-dispatch discrepancy alert</strong> if verification screening detects document conflicts or high risk
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Dropzone */}
         <div className="mt-6">
