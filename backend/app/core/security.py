@@ -28,7 +28,20 @@ def sanitize_filename(name: str) -> str:
     return name[:200] or "upload"
 
 
-def validate_upload(filename: str, declared_mime: str | None, size_bytes: int, max_bytes: int) -> str:
+_MAGIC_SIGNATURES = {
+    ".jpg": (b"\xff\xd8\xff",),
+    ".jpeg": (b"\xff\xd8\xff",),
+    ".png": (b"\x89PNG\r\n\x1a\n",),
+    ".pdf": (b"%PDF-",),
+}
+
+
+def validate_upload(
+    filename: str,
+    declared_mime: str | None,
+    size_bytes: int,
+    max_bytes: int,
+) -> str:
     """Validate extension + declared MIME + size.
 
     Returns the normalized lowercase extension (with dot) on success.
