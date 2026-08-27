@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+﻿import { Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/layout/AppLayout";
 import { LandingPage } from "./pages/LandingPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -10,25 +10,28 @@ import { ReportsPage } from "./pages/ReportsPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { ThemeProvider } from "./context/ThemeContext";
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<LandingPage />} />
+    <ThemeProvider>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
 
-      <Route element={<AppLayout />}>
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/screen/new" element={<NewCasePage />} />
-        <Route path="/screen/processing/:caseId?" element={<ProcessingPage />} />
-        <Route path="/cases/:caseId" element={<CaseDetailPage />} />
-        <Route path="/history" element={<HistoryPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/analytics" element={<AnalyticsPage />} />
-        <Route path="/users" element={<UsersPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-      </Route>
+        <Route element={<AppLayout />}>
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/screen/new" element={<NewCasePage />} />
+          <Route path="/screen/processing/:caseId?" element={<ProcessingPage />} />
+          <Route path="/cases/:caseId" element={<CaseDetailPage />} />
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/users" element={<UsersPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Route>
 
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </ThemeProvider>
   );
 }

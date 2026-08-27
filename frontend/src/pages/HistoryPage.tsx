@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Loader2, Search, ArrowUpDown, Plus } from "lucide-react";
 import { PageHeader, EmptyState } from "../components/layout/PageHeader";
@@ -50,35 +50,36 @@ export function HistoryPage() {
   const items = useMemo(() => data ?? [], [data]);
 
   return (
-    <div className="mx-auto max-w-6xl animate-fade-in">
+    <div className="mx-auto max-w-6xl animate-fade-in space-y-6">
       <PageHeader
         title="Screening History"
-        subtitle="Previously processed verification cases"
+        subtitle="Previously processed verification cases and document audit trails"
         actions={
-          <Link to="/screen/new" className="btn-primary">
-            <Plus size={16} aria-hidden="true" /> New Case
+          <Link to="/screen/new" className="btn-primary shadow-glow-blue flex items-center gap-1.5 text-xs">
+            <Plus size={15} aria-hidden="true" />
+            <span>New Case</span>
           </Link>
         }
       />
 
       {/* Controls */}
-      <div className="card mb-4 flex flex-wrap items-center gap-3 p-4">
+      <div className="card flex flex-wrap items-center gap-3 p-4">
         <div className="relative min-w-[220px] flex-1">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" aria-hidden="true" />
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name, case name or case number…"
             aria-label="Search screening history"
-            className="input-field pl-9"
+            className="input-field pl-9 text-xs"
           />
         </div>
         <select
           value={outcome}
           onChange={(e) => setOutcome(e.target.value)}
           aria-label="Filter by outcome"
-          className="input-field w-auto"
+          className="input-field w-auto text-xs"
         >
           {OUTCOME_FILTERS.map((f) => (
             <option key={f.value} value={f.value}>
@@ -90,7 +91,7 @@ export function HistoryPage() {
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
           aria-label="Sort cases"
-          className="input-field w-auto"
+          className="input-field w-auto text-xs"
         >
           <option value="recent">Newest first</option>
           <option value="risk_desc">Risk: high to low</option>
@@ -99,15 +100,15 @@ export function HistoryPage() {
       </div>
 
       {error && (
-        <p role="alert" className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+        <p role="alert" className="rounded-xl bg-rose-50 dark:bg-rose-950/60 p-4 text-xs font-semibold text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
           {error}
         </p>
       )}
 
       <div className="card overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center gap-3 py-16 text-sm text-slate-500">
-            <Loader2 size={18} className="animate-spin" aria-hidden="true" /> Loading history…
+          <div className="flex items-center justify-center gap-3 py-16 text-xs text-slate-500 dark:text-slate-400">
+            <Loader2 size={18} className="animate-spin text-blue-500" aria-hidden="true" /> Loading history…
           </div>
         ) : items.length === 0 ? (
           <EmptyState
@@ -127,55 +128,55 @@ export function HistoryPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px]">
-              <thead className="border-b border-slate-100 bg-slate-50/60">
+            <table className="w-full min-w-[760px] text-xs">
+              <thead className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400">
                 <tr>
                   <th scope="col" className="table-head-cell">
-                    <span className="inline-flex items-center gap-1">
-                      Case <ArrowUpDown size={12} aria-hidden="true" />
+                    <span className="inline-flex items-center gap-1 font-bold">
+                      Case <ArrowUpDown size={11} aria-hidden="true" />
                     </span>
                   </th>
-                  <th scope="col" className="table-head-cell">Subject</th>
-                  <th scope="col" className="table-head-cell">Case Name</th>
-                  <th scope="col" className="table-head-cell">Docs</th>
+                  <th scope="col" className="table-head-cell font-bold">Subject</th>
+                  <th scope="col" className="table-head-cell font-bold">Case Name</th>
+                  <th scope="col" className="table-head-cell font-bold">Docs</th>
                   <th scope="col" className="table-head-cell">
-                    <span className="inline-flex items-center gap-1">
-                      Risk <ArrowUpDown size={12} aria-hidden="true" />
+                    <span className="inline-flex items-center gap-1 font-bold">
+                      Risk <ArrowUpDown size={11} aria-hidden="true" />
                     </span>
                   </th>
-                  <th scope="col" className="table-head-cell">Status</th>
-                  <th scope="col" className="table-head-cell">Date</th>
+                  <th scope="col" className="table-head-cell font-bold">Status</th>
+                  <th scope="col" className="table-head-cell font-bold">Date</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
                 {items.map((item) => (
-                  <tr key={item.id} className="transition-colors hover:bg-slate-50/70">
-                    <td className="table-cell font-semibold">
+                  <tr key={item.id} className="transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
+                    <td className="table-cell font-mono font-bold">
                       <Link
                         to={`/cases/${item.id}`}
-                        className="text-blue-600 hover:text-blue-700 hover:underline"
+                        className="text-blue-600 dark:text-blue-400 hover:underline"
                       >
                         #{item.case_number}
                       </Link>
                     </td>
-                    <td className="table-cell">{item.person_name ?? "—"}</td>
-                    <td className="table-cell max-w-[220px] truncate">{item.case_name}</td>
-                    <td className="table-cell">{item.document_count}</td>
+                    <td className="table-cell font-semibold text-slate-900 dark:text-white">{item.person_name ?? "—"}</td>
+                    <td className="table-cell max-w-[220px] truncate text-slate-600 dark:text-slate-300">{item.case_name}</td>
+                    <td className="table-cell text-slate-500 dark:text-slate-400">{item.document_count}</td>
                     <td className="table-cell">
                       {item.overall_risk !== null ? (
                         <span
-                          className={`font-bold ${
+                          className={`font-mono font-extrabold ${
                             item.overall_risk >= 60
-                              ? "text-red-600"
+                              ? "text-rose-600 dark:text-rose-400"
                               : item.overall_risk >= 30
-                                ? "text-amber-600"
-                                : "text-emerald-600"
+                                ? "text-amber-600 dark:text-amber-400"
+                                : "text-emerald-600 dark:text-emerald-400"
                           }`}
                         >
-                          {item.overall_risk}
+                          {item.overall_risk}/100
                         </span>
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <span className="text-slate-400 dark:text-slate-500">—</span>
                       )}
                     </td>
                     <td className="table-cell">
@@ -185,7 +186,7 @@ export function HistoryPage() {
                         )}
                       />
                     </td>
-                    <td className="table-cell whitespace-nowrap text-slate-400">
+                    <td className="table-cell whitespace-nowrap text-slate-400 dark:text-slate-500">
                       {fmtDate(item.created_at)}
                     </td>
                   </tr>
@@ -195,10 +196,6 @@ export function HistoryPage() {
           </div>
         )}
       </div>
-
-      <p className="mt-3 text-center text-[11px] text-slate-400">
-        All entries derive from synthetic demo submissions.
-      </p>
     </div>
   );
 }

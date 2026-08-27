@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CloudUpload,
@@ -8,6 +8,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Sparkles,
+  Shield,
+  Smartphone,
 } from "lucide-react";
 import { PageHeader } from "../components/layout/PageHeader";
 import { apiPost, apiPostForm } from "../services/api";
@@ -95,7 +97,6 @@ export function NewCasePage() {
     });
   };
 
-  // Revoke any remaining preview URLs if the user leaves mid-flow.
   useEffect(() => {
     return () => {
       filesRef.current.forEach((f) => f.previewUrl && URL.revokeObjectURL(f.previewUrl));
@@ -159,73 +160,75 @@ export function NewCasePage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl animate-fade-in">
+    <div className="mx-auto max-w-4xl animate-fade-in space-y-6">
       <PageHeader
-        title="New Case"
-        subtitle="Upload identity documents for screening"
+        title="Screen New Case"
+        subtitle="Create an identity verification case and upload documents for forensic screening"
         actions={
           <button
             type="button"
             onClick={loadDemoCase}
             disabled={submitting}
-            className="btn-secondary"
-            title="Loads a prepared synthetic case (Rahul Sharma) through the full pipeline"
+            className="btn-secondary flex items-center gap-1.5"
+            title="Loads synthetic test documents into the 11-stage pipeline"
           >
             {submitting ? (
-              <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+              <Loader2 size={15} className="animate-spin" aria-hidden="true" />
             ) : (
-              <Sparkles size={16} className="text-blue-500" aria-hidden="true" />
+              <Sparkles size={15} className="text-blue-500 animate-pulse" aria-hidden="true" />
             )}
-            Load Demo Case
+            <span>Load Demo Case</span>
           </button>
         }
       />
 
-      <div className="card p-6">
+      <div className="card p-6 space-y-6">
         {/* Case name */}
-        <label htmlFor="case-name" className="mb-1.5 block text-sm font-semibold text-navy-900">
-          Case Name <span className="text-red-500">*</span>
-        </label>
-        <input
-          id="case-name"
-          type="text"
-          className="input-field"
-          placeholder="e.g. Onboarding verification — R. Sharma"
-          value={caseName}
-          maxLength={200}
-          onChange={(e) => setCaseName(e.target.value)}
-        />
+        <div>
+          <label htmlFor="case-name" className="mb-2 block text-xs font-bold uppercase tracking-wider text-navy-900 dark:text-slate-200">
+            Case Identifier / Name <span className="text-rose-500">*</span>
+          </label>
+          <input
+            id="case-name"
+            type="text"
+            className="input-field"
+            placeholder="e.g. Onboarding verification — Rahul Sharma"
+            value={caseName}
+            maxLength={200}
+            onChange={(e) => setCaseName(e.target.value)}
+          />
+        </div>
 
-        {/* Optional Applicant Contact & Discrepancy Alert Routing */}
-        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50/50 p-4 transition-all">
+        {/* Optional Applicant Contact & Alerts */}
+        <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-4 transition-all">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-md bg-blue-100 text-blue-700 text-xs font-bold">
-                📱
-              </span>
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-950/80 text-blue-700 dark:text-blue-400">
+                <Smartphone size={15} />
+              </div>
               <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-navy-900">
-                  Applicant Contact &amp; Discrepancy Alerts (Optional)
+                <h4 className="text-xs font-bold uppercase tracking-wider text-navy-900 dark:text-slate-200">
+                  Applicant Contact &amp; Alert Routing (Optional)
                 </h4>
-                <p className="text-[11px] text-slate-500">
-                  Allows direct SMS, WhatsApp, or Email notifications to the person if discrepancies or high-risk flags are detected.
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Direct SMS, WhatsApp, or Email discrepancy notifications if tampering or mismatch is detected.
                 </p>
               </div>
             </div>
             <button
               type="button"
               onClick={() => setShowContactFields(!showContactFields)}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-700 underline"
+              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline"
             >
               {showContactFields ? "Hide options" : "Configure contact"}
             </button>
           </div>
 
           {showContactFields && (
-            <div className="mt-4 space-y-3 pt-3 border-t border-slate-200/70 animate-fade-in">
+            <div className="mt-4 space-y-3 pt-3 border-t border-slate-200/70 dark:border-slate-800 animate-fade-in">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Applicant Full Name</label>
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Applicant Full Name</label>
                   <input
                     type="text"
                     className="input-field mt-1 text-xs"
@@ -235,7 +238,7 @@ export function NewCasePage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Mobile / WhatsApp Number</label>
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Phone / WhatsApp</label>
                   <input
                     type="text"
                     className="input-field mt-1 text-xs"
@@ -245,7 +248,7 @@ export function NewCasePage() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Email Address</label>
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Email Address</label>
                   <input
                     type="email"
                     className="input-field mt-1 text-xs"
@@ -256,16 +259,16 @@ export function NewCasePage() {
                 </div>
               </div>
 
-              <div className="pt-2">
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700">
+              <div className="pt-1">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-700 dark:text-slate-300">
                   <input
                     type="checkbox"
                     checked={autoNotify}
                     onChange={(e) => setAutoNotify(e.target.checked)}
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    className="rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-blue-600 focus:ring-blue-500"
                   />
                   <span>
-                    <strong>Auto-dispatch discrepancy alert</strong> if verification screening detects document conflicts or high risk
+                    <strong>Auto-dispatch alert</strong> if verification screening flags high risk or cross-document conflict
                   </span>
                 </label>
               </div>
@@ -274,9 +277,9 @@ export function NewCasePage() {
         </div>
 
         {/* Dropzone */}
-        <div className="mt-6">
-          <p className="mb-1.5 text-sm font-semibold text-navy-900">
-            Documents <span className="text-red-500">*</span>
+        <div>
+          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-navy-900 dark:text-slate-200">
+            Upload Documents <span className="text-rose-500">*</span>
           </p>
           <button
             type="button"
@@ -289,22 +292,25 @@ export function NewCasePage() {
             onDragLeave={() => setDragOver(false)}
             onDrop={onDrop}
             aria-label="Add identity documents"
-            className={`flex w-full flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-12 text-center transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
+            className={`flex w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${
               dragOver
-                ? "border-blue-500 bg-blue-50/70"
-                : "border-slate-300 bg-slate-50/60 hover:border-blue-400 hover:bg-blue-50/40"
+                ? "border-blue-500 bg-blue-50/80 dark:bg-blue-950/40 shadow-glow-blue scale-[1.01]"
+                : "border-slate-300 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/40 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50/30 dark:hover:bg-blue-950/20"
             }`}
           >
-            <CloudUpload size={36} className="text-slate-400" aria-hidden="true" />
-            <span className="mt-3 text-sm font-semibold text-navy-900">
-              Drag &amp; drop documents here, or click to browse
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100/80 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400 mb-3 shadow-sm">
+              <CloudUpload size={28} />
+            </div>
+            <span className="text-sm font-bold text-navy-900 dark:text-white">
+              Drag &amp; drop document scans, or click to browse
             </span>
-            <span className="mt-1 text-xs text-slate-400">
-              JPG · JPEG · PNG · PDF — max {MAX_MB} MB per file — multiple files supported
+            <span className="mt-1 text-xs text-slate-400 dark:text-slate-500 font-medium">
+              JPG · JPEG · PNG · PDF (Up to {MAX_MB} MB per file)
             </span>
-            <span className="mt-3 text-xs font-medium text-blue-600">
-              All documents are treated as untrusted input and stored locally.
-            </span>
+            <div className="mt-3 flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400">
+              <Shield size={13} />
+              <span>Multi-document cross-checks supported</span>
+            </div>
           </button>
           <input
             ref={inputRef}
@@ -321,35 +327,35 @@ export function NewCasePage() {
 
         {/* File list */}
         {files.length > 0 && (
-          <ul className="mt-5 space-y-2.5" aria-label="Selected documents">
+          <ul className="space-y-2.5" aria-label="Selected documents">
             {files.map(({ key, file, previewUrl }) => (
               <li
                 key={key}
-                className="animate-rise-in flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-2.5 shadow-card"
+                className="animate-rise-in flex items-center gap-3.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/80 p-3 shadow-card transition-all"
               >
                 {previewUrl ? (
                   <img
                     src={previewUrl}
                     alt={`Preview of ${file.name}`}
-                    className="h-12 w-16 shrink-0 rounded-md border border-slate-200 object-cover"
+                    className="h-12 w-16 shrink-0 rounded-lg border border-slate-200 dark:border-slate-700 object-cover shadow-sm"
                   />
                 ) : (
-                  <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-md bg-navy-50">
-                    <FileText size={20} className="text-navy-500" aria-hidden="true" />
+                  <div className="flex h-12 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                    <FileText size={22} />
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-navy-900">{file.name}</p>
-                  <p className="text-xs text-slate-400">
-                    {formatSize(file.size)} · ready for upload
+                  <p className="truncate text-xs font-bold text-navy-900 dark:text-white">{file.name}</p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                    {formatSize(file.size)} · Ready for upload
                   </p>
                 </div>
-                <CheckCircle2 size={17} className="shrink-0 text-emerald-500" aria-hidden="true" />
+                <CheckCircle2 size={18} className="shrink-0 text-emerald-500" aria-hidden="true" />
                 <button
                   type="button"
                   onClick={() => removeFile(key)}
                   aria-label={`Remove ${file.name}`}
-                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 dark:hover:bg-rose-950/60 hover:text-rose-600 transition-colors"
                 >
                   <Trash2 size={16} aria-hidden="true" />
                 </button>
@@ -358,35 +364,41 @@ export function NewCasePage() {
           </ul>
         )}
 
-        {/* Errors */}
+        {/* Error message */}
         {error && (
-          <div role="alert" className="mt-4 flex items-start gap-2.5 rounded-lg bg-red-50 px-4 py-3">
-            <AlertCircle size={16} className="mt-0.5 shrink-0 text-red-500" aria-hidden="true" />
-            <p className="text-xs leading-relaxed text-red-700">{error}</p>
+          <div role="alert" className="flex items-start gap-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/60 p-4 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300">
+            <AlertCircle size={16} className="mt-0.5 shrink-0 text-rose-500" aria-hidden="true" />
+            <p className="text-xs font-semibold leading-relaxed">{error}</p>
           </div>
         )}
 
-        {/* Categories + CTA */}
-        <div className="mt-6 flex flex-wrap gap-2" aria-label="Supported document categories">
+        {/* Supported Categories Badge List */}
+        <div className="flex flex-wrap gap-1.5 pt-2" aria-label="Supported document categories">
           {DOC_CATEGORIES.map((c) => (
             <span
               key={c}
-              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500"
+              className="rounded-lg border border-slate-200/80 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-400"
             >
               {c}
             </span>
           ))}
         </div>
 
-        <div className="mt-6 flex justify-end border-t border-slate-100 pt-5">
-          <button type="button" onClick={startScreening} disabled={!canSubmit} className="btn-primary">
+        {/* Submit */}
+        <div className="flex justify-end border-t border-slate-100 dark:border-slate-800/80 pt-5">
+          <button
+            type="button"
+            onClick={startScreening}
+            disabled={!canSubmit}
+            className="btn-primary px-6 py-2.5 shadow-glow-blue"
+          >
             {submitting ? (
               <>
                 <Loader2 size={16} className="animate-spin" aria-hidden="true" />
-                Uploading…
+                Uploading &amp; Initiating Pipeline…
               </>
             ) : (
-              "Start Screening / Analyze"
+              "Start Verification Screening"
             )}
           </button>
         </div>
