@@ -1,0 +1,39 @@
+{
+  "_comment": [
+    "ID-SHIELD risk weights. Fully configurable and auditable.",
+    "Every applied factor becomes a RiskFactor row shown in the UI ledger.",
+    "Weights are policy, not measurements; adjust deliberately.",
+    "POLICY: consistency reductions are suppressed whenever a medium/high",
+    "cross-document conflict or a high-suspicion forensic indicator exists -",
+    "consistent evidence cannot cancel a direct identity conflict."
+  ],
+  "factors": {
+    "dob_mismatch": 30,
+    "name_mismatch": 30,
+    "document_number_mismatch": 25,
+    "address_mismatch": 15,
+    "gender_nationality_mismatch": 15,
+    "face_mismatch": 35,
+    "face_borderline": 15,
+    "forensic_high": { "weight": 25, "cap": 1 },
+    "forensic_medium": { "weight": 12, "cap": 2 },
+    "validation_fail_per_check": { "weight": 6, "cap": 18 },
+    "expired_document": { "weight": 10, "cap": 1 },
+    "mrz_checksum_fail": { "weight": 20, "cap": 1 },
+    "document_reuse": { "weight": 30, "cap": 1 }
+  },
+  "reductions": {
+    "name_consistent": -5,
+    "address_consistent": -5,
+    "face_matched": -5,
+    "mrz_valid": -5,
+    "all_validations_pass": -5
+  },
+  "bands": [
+    { "max": 29, "label": "LOW", "recommendation": "verification_passed" },
+    { "max": 59, "label": "MEDIUM", "recommendation": "review_recommended" },
+    { "max": 79, "label": "HIGH", "recommendation": "manual_review_required" },
+    { "max": 100, "label": "CRITICAL", "recommendation": "manual_review_required" }
+  ],
+  "unable_to_verify_recommendation": "unable_to_verify"
+}

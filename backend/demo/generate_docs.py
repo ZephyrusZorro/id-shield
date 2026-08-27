@@ -1,0 +1,330 @@
+"""Synthetic demo document generator.
+
+Draws realistic-but-entirely-fictional identity documents with PIL so the
+full pipeline can be exercised without any real citizen data. Documents
+carry a QR payload (JSON) used later by the QR cross-check stage.
+"""
+from __future__ import annotations
+
+import io
+import json
+import sys
+from dataclasses import dataclass, field
+from datetime import date
+from pathlib import Path
+
+import numpy as np
+import qrcode
+from PIL import Image, ImageDraw, ImageFont
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from app.services.mrz_service import build_td3_lines  # noqa: E402
+
+_FONT_DIR = Path(r"C:\Windows\Fonts")
+_NAVY = (16, 35, 63)
+_BLUE = (37, 99, 235)
+# Neutral grays keep printed content chromatically uniform — the forensic
+# chroma-uniformity detector relies on this property (as do real scans).
+_GRAY = (128, 128, 128)
+_LIGHT = (238, 238, 238)
+_WHITE = (255, 255, 255)
+
+
+@dataclass
+class DocData:
+    doc_type: str  # passport | national_id | pan | address_proof
+    title: str
+    subtitle: str
+    fields: list[tuple[str, str]] = field(default_factory=list)  # label,value
+    qr_payload: dict | None = None
+    photo_initials: str = ""
+    mrz: tuple[str, str] | None = None  # TD3 (line1, line2) with valid checksums
+
+
+def _font(size: int, bold: bool = False, mono: bool = False):
+    if mono:
+        for name in ("consola.ttf", "cour.ttf"):
+            try:
+                return ImageFont.truetype(str(_FONT_DIR / name), size)
+            except OSError:
+                continue
+    name = "arialbd.ttf" if bold else "arial.ttf"
+    try:
+        return ImageFont.truetype(str(_FONT_DIR / name), size)
+    except OSError:
+        return ImageFont.load_default()
+
+
+def _draw_photo(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], initials: str) -> None:
+    x0, y0, x1, y1 = box
+    bw = x1 - x0
+    bh = y1 - y0
+    # Clean background for ID photo
+    draw.rectangle([x0, y0, x1, y1], fill=(225, 235, 245), outline=(100, 116, 139), width=2)
+
+    cx = (x0 + x1) // 2
+    cy = (y0 + y1) // 2
+
+    # Shoulders / Torso (suit / shirt)
+    draw.ellipse([cx - int(bw * 0.45), y1 - int(bh * 0.45), cx + int(bw * 0.45), y1 + int(bh * 0.35)], fill=(30, 58, 110))
+    # Shirt collar (V-neck)
+    draw.polygon([(cx - int(bw * 0.12), y1 - int(bh * 0.28)), (cx + int(bw * 0.12), y1 - int(bh * 0.28)), (cx, y1 - int(bh * 0.15))], fill=(255, 255, 255))
+
+    # Neck
+    neck_w = int(bw * 0.14)
+    draw.rectangle([cx - neck_w, cy + int(bh * 0.05), cx + neck_w, y1 - int(bh * 0.25)], fill=(235, 195, 165))
+
+    # Head (oval)
+    head_w = int(bw * 0.28)
+    head_h = int(bh * 0.36)
+    head_y = cy - int(bh * 0.08)
+    draw.ellipse([cx - head_w, head_y - head_h, cx + head_w, head_y + head_h], fill=(245, 205, 175), outline=(210, 170, 140), width=1)
+
+    # Hair
+    draw.chord([cx - head_w - 2, head_y - head_h - 4, cx + head_w + 2, head_y - int(head_h * 0.1)], start=180, end=360, fill=(35, 30, 30))
+
+    # Eyes & Eyebrows
+    eye_offset_x = int(head_w * 0.45)
+    eye_y = head_y - int(head_h * 0.12)
+    # Eyebrows
+    draw.line([cx - eye_offset_x - 6, eye_y - 8, cx - eye_offset_x + 6, eye_y - 8], fill=(30, 25, 25), width=2)
+    draw.line([cx + eye_offset_x - 6, eye_y - 8, cx + eye_offset_x + 6, eye_y - 8], fill=(30, 25, 25), width=2)
+    # Eyes
+    draw.ellipse([cx - eye_offset_x - 4, eye_y - 3, cx - eye_offset_x + 4, eye_y + 3], fill=(255, 255, 255))
+    draw.ellipse([cx - eye_offset_x - 2, eye_y - 2, cx - eye_offset_x + 2, eye_y + 2], fill=(40, 30, 20))
+    draw.ellipse([cx + eye_offset_x - 4, eye_y - 3, cx + eye_offset_x + 4, eye_y + 3], fill=(255, 255, 255))
+    draw.ellipse([cx + eye_offset_x - 2, eye_y - 2, cx + eye_offset_x + 2, eye_y + 2], fill=(40, 30, 20))
+
+    # Nose
+    nose_y = head_y + int(head_h * 0.15)
+    draw.polygon([(cx, eye_y + 4), (cx - 3, nose_y), (cx + 3, nose_y)], fill=(225, 185, 155))
+
+    # Mouth
+    mouth_y = head_y + int(head_h * 0.45)
+    draw.arc([cx - 10, mouth_y - 4, cx + 10, mouth_y + 4], start=10, end=170, fill=(180, 80, 80), width=2)
+
+    # Initials badge in bottom corner
+    if initials:
+        bf = _font(16, bold=True)
+        draw.rounded_rectangle([x1 - 36, y1 - 24, x1 - 4, y1 - 4], radius=4, fill=(15, 23, 42))
+        draw.text((x1 - 32, y1 - 22), initials, fill=(255, 255, 255), font=bf)
+
+
+def _add_qr(img: Image.Image, payload: dict, box: tuple[int, int], box_size: int = 3) -> None:
+    if payload is None:
+        return
+    qr = qrcode.QRCode(box_size=box_size, border=1)
+    qr.add_data(json.dumps(payload, separators=(",", ":")))
+    qr.make(fit=True)
+    qimg = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+    img.paste(qimg, box)
+
+
+def render_document(data: DocData, out_path: Path) -> Path:
+    w, h = (1000, 630) if data.doc_type != "address_proof" else (1000, 900)
+    img = Image.new("RGB", (w, h), _WHITE)
+    draw = ImageDraw.Draw(img)
+
+    # Header band
+    draw.rectangle([0, 0, w, 90], fill=_NAVY)
+    draw.rectangle([0, 90, w, 96], fill=_BLUE)
+    title_f = _font(34, bold=True)
+    sub_f = _font(18)
+    draw.text((40, 20), data.title, fill=_WHITE, font=title_f)
+    draw.text((40, 60), data.subtitle, fill=(168, 192, 218), font=sub_f)
+
+    if data.doc_type == "address_proof":
+        # Letter-style layout
+        y = 140
+        body_f = _font(22)
+        label_f = _font(20, bold=True)
+        for label, value in data.fields:
+            draw.text((60, y), f"{label}:", fill=_GRAY, font=label_f)
+            y += 32
+            for chunk in [value[i:i + 80] for i in range(0, len(value), 80)]:
+                draw.text((80, y), chunk, fill=(40, 40, 40), font=body_f)
+                y += 30
+            y += 14
+        footer = "This is a SYNTHETIC demo document generated by ID-SHIELD. All data is fictional."
+        draw.text((60, h - 50), footer, fill=(180, 60, 60), font=_font(16))
+    else:
+        # Card-style layout
+        has_mrz = data.mrz is not None
+        photo_box = (700, 150, 920, 400)
+        _draw_photo(draw, photo_box, data.photo_initials)
+        y = 150
+        label_x, value_x = 60, 320
+        row_h = 52 if has_mrz else 64
+        label_f = _font(19, bold=True)
+        value_f = _font(23 if not has_mrz else 21)
+        small_f = _font(16)
+        for label, value in data.fields:
+            draw.text((label_x, y + 6), f"{label.upper()}", fill=_GRAY, font=label_f)
+            draw.text((value_x, y), value, fill=(15, 20, 30), font=value_f)
+            draw.line([(label_x, y + row_h - 18), (660, y + row_h - 18)], fill=(225, 230, 238), width=1)
+            y += row_h
+        if data.qr_payload:
+            if has_mrz:
+                # Keep the QR clear of the MRZ band rows so OCR lines never
+                # merge with machine-readable text.
+                _add_qr(img, data.qr_payload, (730, 404), box_size=2)
+            else:
+                _add_qr(img, data.qr_payload, (710, 430))
+                draw.text((710, 560), "VERIFICATION QR (demo)", fill=_GRAY, font=small_f)
+
+        if has_mrz:
+            mrz_bg_top = h - 118
+            draw.rectangle([0, mrz_bg_top - 8, w, h], fill=(250, 251, 253))
+            # Draw each monospace glyph explicitly so spacing stays exact and
+            # OCR sees clean, separated characters.
+            mono = _font(28, bold=True, mono=True)
+            char_w = mono.getbbox("0")[2] - mono.getbbox("0")[0] + 3
+            for row, text_line in enumerate(data.mrz):
+                x = max(8, (w - char_w * 44) // 2)
+                y_row = mrz_bg_top + row * 44
+                for ch in text_line:
+                    draw.text((x, y_row), ch, fill=(10, 12, 18), font=mono)
+                    x += char_w
+
+        footer = "SYNTHETIC DOCUMENT — ID-SHIELD DEMO DATASET — FICTIONAL DATA"
+        footer_y = (mrz_bg_top - 22) if has_mrz else (h - 36)
+        draw.text((40, footer_y), footer, fill=(200, 205, 215), font=_font(14))
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(out_path, quality=95)
+    return out_path
+
+
+# --------------------------------------------------------------------------
+# Signature demo set: RAHUL SHARMA (all fictional)
+# --------------------------------------------------------------------------
+
+def tamper_strip(
+    image_path: Path,
+    bbox: tuple[int, int, int, int],
+    replacement: str = "",
+    text_origin: tuple[int, int] = (5, 8),
+) -> None:
+    """Apply a controlled, genuine manipulation to a rectangular strip.
+
+    Simulates an editor edit: the strip round-trips through an independent
+    aggressive JPEG cycle (q=45) plus additive sensor-noise mismatch, then
+    the replacement value is re-typed cleanly on top — readable text sitting
+    on visibly inconsistent surroundings. Leaves real double-compression and
+    chroma-noise traces that ELA/chroma analysis can detect.
+    """
+    img = Image.open(image_path)
+    x, y, w, h = bbox
+
+    region = img.crop((x, y, x + w, y + h))
+    buf = io.BytesIO()
+    region.save(buf, format="JPEG", quality=45)
+    buf.seek(0)
+    region = Image.open(buf).convert("RGB")
+
+    arr = np.asarray(region).astype(np.int16)
+    rng = np.random.default_rng(42)
+    arr = np.clip(arr + rng.normal(0, 14.0, arr.shape).astype(np.int16), 0, 255)
+    patched = Image.fromarray(arr.astype(np.uint8))
+
+    if replacement:
+        d = ImageDraw.Draw(patched)
+        d.text(text_origin, replacement, fill=(15, 18, 25), font=_font(23))
+
+    img.paste(patched, (x, y))
+    img.save(image_path)
+
+
+def signature_case_documents(out_dir: Path) -> list[Path]:
+    common_qr = {"name": "RAHUL SHARMA"}
+
+    # Doc number deliberately avoids O/0 and check-digit tail avoids
+    # OCR-confusable glyphs (ICAO itself advises issuers to avoid I/O).
+    passport_mrz = build_td3_lines(
+        surname="SHARMA",
+        given_names="RAHUL",
+        document_number="SR1429697",
+        nationality="SRD",
+        dob_yyMMdd="010512",
+        sex="M",
+        expiry_yyMMdd="340202",
+        personal_number="TX97",
+    )
+    passport = DocData(
+        doc_type="passport",
+        title="SAMPLE REPUBLIC",
+        subtitle="INTERNATIONAL PASSPORT — DEMO ISSUE",
+        fields=[
+            ("Passport No", "SR1429697"),
+            ("Surname", "SHARMA"),
+            ("Given Name", "RAHUL"),
+            ("Nationality", "INDIAN"),
+            ("Date of Birth", "12/05/2001"),
+            ("Date of Issue", "03/02/2024"),
+            ("Date of Expiry", "02/02/2034"),
+        ],
+        qr_payload={**common_qr, "doc": "SR1429697"},
+        photo_initials="RS",
+        mrz=passport_mrz,
+    )
+    national_id = DocData(
+        doc_type="national_id",
+        title="NATIONAL IDENTITY CARD",
+        subtitle="SAMPLE REPUBLIC — CIVIL REGISTRY (DEMO)",
+        fields=[
+            ("ID Number", "SR-8841-7723"),
+            ("Full Name", "RAHUL SHARMA"),
+            ("Date of Birth", "12/05/2001"),
+            ("Gender", "M"),
+            ("Address", "14 LAKEVIEW ROAD PUNE 411001"),
+        ],
+        qr_payload={**common_qr, "doc": "SR-8841-7723"},
+        photo_initials="RS",
+    )
+    pan = DocData(
+        doc_type="pan",
+        title="PERMANENT ACCOUNT NUMBER",
+        subtitle="DEMO TAX AUTHORITY — SAMPLE CARD",
+        fields=[
+            ("PAN No", "BRXPS1234K"),
+            ("Name", "RAHUL SHARMA"),
+            ("Date of Birth", "12/05/1999"),
+            ("Father's Name", "VIKRAM SHARMA"),
+        ],
+        qr_payload={**common_qr, "doc": "BRXPS1234K"},
+        photo_initials="RS",
+    )
+    address_proof = DocData(
+        doc_type="address_proof",
+        title="ADDRESS PROOF CERTIFICATE",
+        subtitle="ISSUED BY DEMO HOUSING SOCIETY — SYNTHETIC RECORD",
+        fields=[
+            ("Resident Name", "RAHUL SHARMA"),
+            ("Residing At", "14 LAKEVIEW ROAD, PUNE 411001"),
+            ("Since", "JUNE 2022"),
+            ("Reference No", "HS/2022/00871"),
+        ],
+        qr_payload=None,
+    )
+
+    outs = [
+        render_document(passport, out_dir / "passport_A_rahul_sharma.png"),
+        render_document(national_id, out_dir / "national_id_B_rahul_sharma.png"),
+        render_document(pan, out_dir / "pan_C_rahul_sharma.png"),
+        render_document(address_proof, out_dir / "address_proof_D_rahul_sharma.png"),
+    ]
+
+    # Signature narrative: document C's DOB region was deliberately edited
+    # after issuance (value re-typed at mismatched resolution). The strip
+    # covers the DOB value area on the card (row 3: y=150+2*64, x=320..660).
+    pan_path = outs[2]
+    tamper_strip(pan_path, (315, 268, 352, 62), replacement="12/05/1999", text_origin=(5, 8))
+    print(f"tampered DOB strip on: {pan_path.name}")
+    return outs
+
+
+if __name__ == "__main__":
+    base = Path(__file__).parent / "assets"
+    paths = signature_case_documents(base / "signature_case")
+    for p in paths:
+        print(f"generated: {p}")

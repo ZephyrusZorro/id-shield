@@ -1,0 +1,57 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Node ----
+node_modules/
+dist/
+*.local
+
+# ---- Environment / secrets ----
+.env
+.env.*
+!.env.example
+
+# ---- Runtime data (uploads, databases, generated demo assets) ----
+data/
+backend/data/
+*.db
+*.sqlite3
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ---- Build artifacts / stray files ----
+*.zip
+MY-PROJECT
+backend/cv2/
+backend/imagehash/
+backend/numpy/
+backend/PIL/
+backend/fastapi/
+backend/sqlalchemy/
+backend/starlette/
+backend/pydantic/
+backend/qrcode/
+backend/pytesseract/
+backend/fitz/
+cv2/
+imagehash/
+numpy/
+PIL/
+fastapi/
+sqlalchemy/
+starlette/
+pydantic/
+qrcode/
+pytesseract/
+fitz/
