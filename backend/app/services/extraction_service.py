@@ -191,6 +191,13 @@ def extract_fields(ocr_result: OcrResult) -> list[ExtractedFieldDraft]:
             if line.bbox[1] + line.bbox[3] / 2 < approx_height * 0.13:
                 continue  # header/title band
             value_part = m.group(2).strip()
+
+            # If the label has no value on the same line, check the next line
+            if not value_part and idx + 1 < len(lines):
+                next_line = lines[idx + 1]
+                if not _looks_like_label_line(next_line.text) and next_line.text.count("<") < 3:
+                    value_part = next_line.text.strip()
+
             if spec.multiline:
                 # Consume up to two follow lines until another labeled line
                 # begins. OCR frequently drops colons, so label detection —
@@ -227,4 +234,137 @@ def extract_fields(ocr_result: OcrResult) -> list[ExtractedFieldDraft]:
     match_spec(_FULL_NAME_SPEC)
 
     _compose_full_name(drafts, lines)
+
+    # ---- Fallback Pattern Extraction (PAN, Aadhaar, Passport, Dates) ----
+    existing_fields = {d.field_name for d in drafts}
+
+    # 1. Document Number Patterns (e.g. Indian PAN, Aadhaar, Passport, DL)
+    if "document_number" not in existing_fields:
+        for line in lines:
+            text = line.text.strip()
+            # PAN Card pattern: ABCDE1234F
+            pan_match = re.search(r"\b[A-Z]{5}[0-9]{4}[A-Z]\b", text)
+            if pan_match:
+                drafts.append(
+                    ExtractedFieldDraft(
+                        field_name="document_number",
+                        raw_value=pan_match.group(0),
+                        normalized_value=pan_match.group(0).upper(),
+                        confidence=round(line.confidence, 1),
+                        source_region={"x": line.bbox[0], "y": line.bbox[1], "w": line.bbox[2], "h": line.bbox[3]},
+                    )
+                )
+                existing_fields.add("document_number")
+                break
+
+            # Aadhaar 12-digit pattern: XXXX XXXX XXXX
+            aadhaar_match = re.search(r"\b\d{4}\s\d{4}\s\d{4}\b", text)
+            if aadhaar_match:
+                drafts.append(
+                    ExtractedFieldDraft(
+                        field_name="document_number",
+                        raw_value=aadhaar_match.group(0),
+                        normalized_value=aadhaar_match.group(0).replace(" ", ""),
+                        confidence=round(line.confidence, 1),
+                        source_region={"x": line.bbox[0], "y": line.bbox[1], "w": line.bbox[2], "h": line.bbox[3]},
+                    )
+                )
+                existing_fields.add("document_number")
+                break
+
+    # 2. Date of Birth Pattern Fallback (e.g. DOB: DD/MM/YYYY or standalone date near 'DOB'/'Birth'/'जन्म')
+    if "date_of_birth" not in existing_fields:
+        for line in lines:
+            text = line.text.strip()
+            if re.search(r"(dob|birth|born|जन्म|yob)", text, re.IGNORECASE):
+                date_m = _DATE_TOKEN.search(text)
+                if date_m:
+                    norm = normalize_date_str(date_m.group(0))
+                    if norm:
+                        drafts.append(
+                            ExtractedFieldDraft(
+                                field_name="date_of_birth",
+                                raw_value=date_m.group(0),
+                                normalized_value=norm,
+                                confidence=round(line.confidence, 1),
+                                source_region={"x": line.bbox[0], "y": line.bbox[1], "w": line.bbox[2], "h": line.bbox[3]},
+                            )
+                        )
+                        existing_fields.add("date_of_birth")
+                        break
+
+    # 3. MRZ (Machine Readable Zone) Auto-Extraction Fallback for Passports
+    from app.services.mrz_service import parse_mrz
+    mrz = parse_mrz([l.text for l in lines])
+    if mrz is not None:
+        if "document_number" not in existing_fields and mrz.document_number:
+            drafts.append(
+                ExtractedFieldDraft(
+                    field_name="document_number",
+                    raw_value=mrz.document_number,
+                    normalized_value=mrz.document_number.upper(),
+                    confidence=95.0,
+                    source_region=None,
+                )
+            )
+            existing_fields.add("document_number")
+        if "date_of_birth" not in existing_fields and mrz.dob:
+            drafts.append(
+                ExtractedFieldDraft(
+                    field_name="date_of_birth",
+                    raw_value=mrz.dob.isoformat(),
+                    normalized_value=mrz.dob.isoformat(),
+                    confidence=95.0,
+                    source_region=None,
+                )
+            )
+            existing_fields.add("date_of_birth")
+        if "expiry_date" not in existing_fields and mrz.expiry:
+            drafts.append(
+                ExtractedFieldDraft(
+                    field_name="expiry_date",
+                    raw_value=mrz.expiry.isoformat(),
+                    normalized_value=mrz.expiry.isoformat(),
+                    confidence=95.0,
+                    source_region=None,
+                )
+            )
+            existing_fields.add("expiry_date")
+        if "nationality" not in existing_fields and mrz.nationality:
+            drafts.append(
+                ExtractedFieldDraft(
+                    field_name="nationality",
+                    raw_value=mrz.nationality,
+                    normalized_value=mrz.nationality.upper(),
+                    confidence=95.0,
+                    source_region=None,
+                )
+            )
+            existing_fields.add("nationality")
+        if "gender" not in existing_fields and mrz.sex in ("M", "F"):
+            drafts.append(
+                ExtractedFieldDraft(
+                    field_name="gender",
+                    raw_value=mrz.sex,
+                    normalized_value=normalize_gender(mrz.sex),
+                    confidence=95.0,
+                    source_region=None,
+                )
+            )
+            existing_fields.add("gender")
+        if "full_name" not in existing_fields:
+            mrz_full = f"{mrz.given_names} {mrz.surname}".strip()
+            if mrz_full:
+                drafts.append(
+                    ExtractedFieldDraft(
+                        field_name="full_name",
+                        raw_value=mrz_full,
+                        normalized_value=normalize_name(mrz_full),
+                        confidence=95.0,
+                        source_region=None,
+                    )
+                )
+                existing_fields.add("full_name")
+
     return drafts
+

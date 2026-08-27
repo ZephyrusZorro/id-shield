@@ -15,6 +15,14 @@ import { StatusBadge } from "../components/dashboard/StatusBadge";
 import { useApi } from "../hooks/useApi";
 import type { HistoryItem, ScreeningStatus } from "../types/api";
 
+function recommendationToStatus(rec: string | null, risk: number | null): ScreeningStatus {
+  if (rec === null || risk === null || rec === "unable_to_verify")
+    return "pending";
+  if (rec === "verification_passed") return "valid";
+  if (risk >= 60 || rec === "manual_review_required") return "high_risk";
+  return "under_review";
+}
+
 export function ReportsPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -30,9 +38,10 @@ export function ReportsPage() {
         `#${item.case_number}`.includes(search) ||
         (item.person_name && item.person_name.toLowerCase().includes(search.toLowerCase()));
 
+      const badgeStatus = recommendationToStatus(item.recommendation, item.overall_risk);
       const matchesStatus =
         statusFilter === "all" ||
-        item.status.toLowerCase() === statusFilter.toLowerCase();
+        badgeStatus === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
@@ -42,11 +51,12 @@ export function ReportsPage() {
     if (!cases) return { total: 0, valid: 0, review: 0, highRisk: 0 };
     return {
       total: cases.length,
-      valid: cases.filter((c) => c.status === "valid").length,
-      review: cases.filter((c) => c.status === "under_review").length,
-      highRisk: cases.filter((c) => c.status === "high_risk").length,
+      valid: cases.filter((c) => recommendationToStatus(c.recommendation, c.overall_risk) === "valid").length,
+      review: cases.filter((c) => recommendationToStatus(c.recommendation, c.overall_risk) === "under_review").length,
+      highRisk: cases.filter((c) => recommendationToStatus(c.recommendation, c.overall_risk) === "high_risk").length,
     };
   }, [cases]);
+
 
   return (
     <div className="mx-auto max-w-7xl animate-fade-in space-y-6 pb-12">
@@ -181,7 +191,7 @@ export function ReportsPage() {
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-2">
-                        <StatusBadge status={item.status as ScreeningStatus} />
+                        <StatusBadge status={recommendationToStatus(item.recommendation, item.overall_risk)} />
                         {item.overall_risk !== null && (
                           <span className="text-[11px] font-medium text-slate-500">
                             Score: {item.overall_risk}/100
