@@ -146,6 +146,35 @@ def get_case_report(case_id: str, db: Session = Depends(get_db)) -> CaseReport:
         )
     )
 
+    # ---- facial cross-matching -------------------------------------------
+    face_conflicts = [c for c in conflicts if c.field_name == "facial_photo" and c.severity in ("medium", "high")]
+    face_matches = [c for c in conflicts if c.field_name == "facial_photo" and c.severity == "info"]
+    face_extractions = [v for v in validations if v.check_type == "Face photo extraction"]
+    if face_conflicts:
+        summary_items.append(
+            ScreeningSummaryItem(
+                module="Facial cross-matching",
+                outcome="mismatch",
+                detail=f"{len(face_conflicts)} photo mismatch detected across documents",
+            )
+        )
+    elif face_matches:
+        summary_items.append(
+            ScreeningSummaryItem(
+                module="Facial cross-matching",
+                outcome="matched",
+                detail=f"Consistent facial photos across {len(face_extractions)} documents",
+            )
+        )
+    elif face_extractions:
+        summary_items.append(
+            ScreeningSummaryItem(
+                module="Facial cross-matching",
+                outcome="single_source",
+                detail=f"{len(face_extractions)} facial photo extracted",
+            )
+        )
+
     # ---- OCR -------------------------------------------------------------
     ocr_ok = sum(1 for d in docs if d.ocr_mean_confidence is not None)
     summary_items.append(

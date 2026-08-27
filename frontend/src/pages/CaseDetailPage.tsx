@@ -11,6 +11,7 @@ import { PageHeader } from "../components/layout/PageHeader";
 import { ValidationTab } from "../components/documents/ValidationTab";
 import { ComparisonTab } from "../components/documents/ComparisonTab";
 import { ForensicsTab } from "../components/documents/ForensicsTab";
+import { FaceVerificationTab } from "../components/documents/FaceVerificationTab";
 import { ReportTab } from "../components/documents/ReportTab";
 import { DocImage } from "../components/documents/DocImage";
 import { useApi } from "../hooks/useApi";
@@ -115,7 +116,15 @@ function RiskPanel({ caseId }: { caseId: string }) {
 }
 import type { CaseDetail, DocumentDetail } from "../types/api";
 
-const TABS = ["Overview", "Documents", "Validation", "Forensics", "Comparison", "Report"] as const;
+const TABS = [
+  "Overview",
+  "Documents",
+  "Validation",
+  "Forensics",
+  "Face Verification",
+  "Comparison",
+  "Report",
+] as const;
 type Tab = (typeof TABS)[number];
 
 const FIELD_LABELS: Record<string, string> = {
@@ -400,9 +409,14 @@ export function CaseDetailPage() {
                       </figure>
                     ))}
                   </div>
-                  <button type="button" onClick={() => setTab("Documents")} className="btn-secondary mt-5">
-                    Inspect extracted fields
-                  </button>
+                  <div className="mt-5 flex flex-wrap items-center gap-3">
+                    <button type="button" onClick={() => setTab("Documents")} className="btn-secondary">
+                      Inspect extracted fields
+                    </button>
+                    <button type="button" onClick={() => setTab("Face Verification")} className="btn-secondary">
+                      Inspect facial biometrics
+                    </button>
+                  </div>
                 </>
               ) : (
                 <p className="mt-6 text-sm text-slate-500">No documents in this case yet.</p>
@@ -417,6 +431,10 @@ export function CaseDetailPage() {
           {caseData && tab === "Comparison" && caseId && <ComparisonTab caseId={caseId} />}
 
           {caseData && tab === "Forensics" && caseId && <ForensicsTab caseId={caseId} />}
+
+          {caseData && tab === "Face Verification" && caseId && (
+            <FaceVerificationTab caseId={caseId} />
+          )}
 
           {caseData && tab === "Report" && caseId && <ReportTab caseId={caseId} />}
         </div>

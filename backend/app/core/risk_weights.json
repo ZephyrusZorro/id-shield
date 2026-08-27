@@ -13,6 +13,8 @@
     "document_number_mismatch": 25,
     "address_mismatch": 15,
     "gender_nationality_mismatch": 15,
+    "face_mismatch": 35,
+    "face_borderline": 15,
     "forensic_high": { "weight": 25, "cap": 1 },
     "forensic_medium": { "weight": 12, "cap": 2 },
     "validation_fail_per_check": { "weight": 6, "cap": 18 },
@@ -23,6 +25,7 @@
   "reductions": {
     "name_consistent": -5,
     "address_consistent": -5,
+    "face_matched": -5,
     "mrz_valid": -5,
     "all_validations_pass": -5
   },

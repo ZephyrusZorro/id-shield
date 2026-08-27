@@ -19,6 +19,8 @@ const OUTCOME_TONE: Record<string, string> = {
   mismatch: "bg-red-50 text-red-700 ring-red-600/20",
   suspicious: "bg-red-50 text-red-700 ring-red-600/20",
   issues: "bg-red-50 text-red-700 ring-red-600/20",
+  matched: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+  single_source: "bg-blue-50 text-blue-700 ring-blue-600/20",
   reuse_detected: "bg-amber-50 text-amber-700 ring-amber-600/25",
   warnings: "bg-amber-50 text-amber-700 ring-amber-600/25",
   partial: "bg-amber-50 text-amber-700 ring-amber-600/25",

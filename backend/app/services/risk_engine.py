@@ -24,6 +24,7 @@ _FIELD_FACTOR = {
     "address": "address_mismatch",
     "gender": "gender_nationality_mismatch",
     "nationality": "gender_nationality_mismatch",
+    "facial_photo": "face_mismatch",
 }
 
 
@@ -56,6 +57,7 @@ class RiskInput:
     duplicate_hits: int = 0
     name_consistent: bool = False
     address_consistent: bool = False
+    face_consistent: bool = False
     all_validations_pass: bool = False
     has_any_evidence: bool = False  # any OCR/validation output at all
 
@@ -155,6 +157,7 @@ def evaluate(inp: RiskInput) -> dict:
 
     reduce("name_consistent", inp.name_consistent, "Name consistent across documents.")
     reduce("address_consistent", inp.address_consistent, "Address consistent across documents.")
+    reduce("face_matched", inp.face_consistent, "Facial photo consistent across documents.")
     reduce("mrz_valid", inp.mrz_valid_present, "MRZ checksums verified successfully.")
     reduce(
         "all_validations_pass",

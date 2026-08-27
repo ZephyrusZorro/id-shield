@@ -7,7 +7,6 @@ module degrades gracefully — partial results are preserved and surfaced.
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 import cv2
@@ -41,6 +40,7 @@ STAGE_DEFS: list[tuple[str, str]] = [
     ("fields", "Field extraction"),
     ("qrcode", "QR / barcode cross-check"),
     ("forensics", "Visual tampering analysis"),
+    ("faces", "Facial photo cross-matching"),
     ("duplicates", "Reuse / duplicate scan"),
     ("validate", "Document validation & MRZ"),
     ("consistency", "Cross-document consistency"),
@@ -340,6 +340,98 @@ def _stage_forensics(db: Session, docs: list[Document], ctx: StageContext) -> di
     return {"message": "No significant tampering indicators detected."}
 
 
+def _stage_faces(db: Session, docs: list[Document], ctx: StageContext) -> dict | None:
+    """Detect and cross-match facial photos across documents."""
+    from app.services import face_service
+    from app.services.preprocessing_service import load_image
+    from app.db.models import CrossDocumentFinding, ValidationResult
+
+    case_id = docs[0].case_id
+    crops_dir = settings.upload_dir / case_id / "faces"
+    crops_dir.mkdir(parents=True, exist_ok=True)
+
+    face_crops: list[face_service.FaceCropResult] = []
+    doc_paths: dict[str, Path] = {}
+
+    for doc in docs:
+        src = settings.upload_dir / doc.original_path
+        if not src.is_file():
+            continue
+        doc_paths[doc.id] = src
+        try:
+            image = load_image(src)
+            crop_res = face_service.extract_face(
+                image,
+                doc_id=doc.id,
+                file_name=doc.file_name,
+                doc_type=doc.document_type,
+                save_crop_dir=crops_dir,
+            )
+            if crop_res is not None:
+                face_crops.append(crop_res)
+                db.add(
+                    ValidationResult(
+                        document_id=doc.id,
+                        check_type="Face photo extraction",
+                        status="pass",
+                        message=(
+                            f"Facial photo detected ({crop_res.detection_method.replace('_', ' ')}), "
+                            f"sharpness score: {crop_res.sharpness:.1f}."
+                        ),
+                        evidence={
+                            "bbox": crop_res.bbox,
+                            "sharpness": crop_res.sharpness,
+                            "contrast": crop_res.contrast,
+                        },
+                    )
+                )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("FACE_EXTRACTION_FAILED | doc_id=%s err=%s", doc.id, exc)
+
+    comparisons = face_service.compare_document_faces(face_crops, doc_paths)
+    for c in comparisons:
+        db.add(
+            CrossDocumentFinding(
+                case_id=case_id,
+                field_name="facial_photo",
+                severity=c.severity,
+                documents_involved=[
+                    {"document_id": c.doc_a_id, "file_name": c.doc_a_name, "value": f"Photo ({c.doc_a_name})"},
+                    {"document_id": c.doc_b_id, "file_name": c.doc_b_name, "value": f"Photo ({c.doc_b_name})"},
+                ],
+                values={
+                    c.doc_a_id: f"{c.doc_a_name} face",
+                    c.doc_b_id: f"{c.doc_b_name} face",
+                },
+                explanation=c.explanation,
+            )
+        )
+
+    log_stage(log, "FACE_CROSSMATCH_COMPLETED", case_id=case_id, faces=len(face_crops), comparisons=len(comparisons))
+
+    if not face_crops:
+        return {"message": "No facial photos detected in submitted documents."}
+    if len(face_crops) == 1:
+        return {"message": f"Single facial photo detected in {face_crops[0].file_name}; cross-match requires 2+ docs."}
+
+    mismatches = [c for c in comparisons if c.status == "mismatch"]
+    borderlines = [c for c in comparisons if c.status == "borderline"]
+    if mismatches:
+        return {
+            "warning": True,
+            "message": f"Facial photo mismatch detected ({mismatches[0].similarity_score}% similarity). Review required.",
+        }
+    if borderlines:
+        return {
+            "warning": True,
+            "message": f"Facial photo similarity borderline ({borderlines[0].similarity_score}% similarity). Review recommended.",
+        }
+    avg_score = int(sum(c.similarity_score for c in comparisons) / len(comparisons)) if comparisons else 100
+    return {
+        "message": f"Facial photos match across {len(face_crops)} documents (average {avg_score}% similarity).",
+    }
+
+
 def _stage_qrcode(db: Session, docs: list[Document], ctx: StageContext) -> dict | None:
     """Decode QR payloads from originals and cross-check against fields."""
     from app.services import qr_service
@@ -427,6 +519,9 @@ def _stage_risk(db: Session, docs: list[Document], ctx: StageContext) -> dict | 
     address_consistent = any(
         c.field_name == "address" and c.severity == "info" for c in conflicts
     )
+    face_consistent = any(
+        c.field_name == "facial_photo" and c.severity == "info" for c in conflicts
+    )
     field_counts: dict[str, int] = {}
     for d in docs:
         n = (
@@ -455,6 +550,7 @@ def _stage_risk(db: Session, docs: list[Document], ctx: StageContext) -> dict | 
         duplicate_hits=duplicate_hits,
         name_consistent=name_consistent,
         address_consistent=address_consistent,
+        face_consistent=face_consistent,
         all_validations_pass=(
             bool(val_rows)
             and all(v.status in ("pass", "unavailable") for v in val_rows)
@@ -566,6 +662,7 @@ _RUNNERS = {
     "fields": _stage_fields,
     "qrcode": _stage_qrcode,
     "forensics": _stage_forensics,
+    "faces": _stage_faces,
     "duplicates": _stage_duplicates,
     "validate": _stage_validate,
     "consistency": _stage_consistency,

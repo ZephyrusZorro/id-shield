@@ -248,3 +248,132 @@ export interface CaseForensicsResponse {
   disclaimer: string;
   documents: DocumentForensicsReport[];
 }
+
+export interface FaceCropInfo {
+  document_id: string;
+  file_name: string;
+  bbox: [number, number, number, number];
+  normalized_bbox: [number, number, number, number];
+  confidence: number;
+  detection_method: string;
+  sharpness: number;
+  brightness: number;
+  contrast: number;
+  has_crop: boolean;
+}
+
+export interface FaceMetrics {
+  ssim_score: number;
+  phash_similarity: number;
+  lbp_correlation: number;
+  color_correlation: number;
+}
+
+export interface FaceComparisonPair {
+  doc_a_id: string;
+  doc_a_name: string;
+  doc_b_id: string;
+  doc_b_name: string;
+  similarity_score: number;
+  status: "match" | "borderline" | "mismatch";
+  severity: "info" | "medium" | "high";
+  explanation: string;
+  metrics: FaceMetrics;
+}
+
+export interface CaseFacesResponse {
+  case_id: string;
+  disclaimer: string;
+  faces: FaceCropInfo[];
+  comparisons: FaceComparisonPair[];
+  overall_status: "match" | "borderline" | "mismatch" | "single_face" | "no_faces";
+}
+
+// ---------------- Analytics & Intelligence ----------------
+
+export interface AnalyticsKpis {
+  total_cases: number;
+  valid_count: number;
+  review_count: number;
+  high_risk_count: number;
+  pass_rate: number;
+  review_rate: number;
+  high_risk_rate: number;
+  average_risk_score: number;
+  avg_processing_time_ms: number;
+  total_documents_analyzed: number;
+  face_verifications_count: number;
+  face_mismatch_rate: number;
+}
+
+export interface VolumeTrendPoint {
+  date: string;
+  valid: number;
+  under_review: number;
+  high_risk: number;
+  total: number;
+}
+
+export interface RiskDistributionBucket {
+  tier: string;
+  range_label: string;
+  count: number;
+  percentage: number;
+  color: string;
+}
+
+export interface MismatchFieldStat {
+  field_name: string;
+  label: string;
+  count: number;
+  percentage: number;
+  severity_breakdown: Record<string, number>;
+}
+
+export interface DocumentTypeStat {
+  document_type: string;
+  label: string;
+  count: number;
+  percentage: number;
+  pass_rate: number;
+  avg_confidence: number;
+}
+
+export interface ForensicSignalStat {
+  signal_key: string;
+  label: string;
+  category: "tampering" | "biometric" | "validation" | "security_feature";
+  detected_count: number;
+  rate_percent: number;
+  avg_severity_score: number;
+}
+
+export interface StageLatencyStat {
+  stage_key: string;
+  stage_label: string;
+  avg_duration_ms: number;
+  min_duration_ms: number;
+  max_duration_ms: number;
+}
+
+export interface IntelligenceInsight {
+  id: string;
+  type: "risk_alert" | "trend" | "performance" | "quality";
+  title: string;
+  description: string;
+  metric: string;
+  importance: "high" | "medium" | "info";
+}
+
+export interface AnalyticsResponse {
+  time_range: "7d" | "30d" | "90d" | "all";
+  kpis: AnalyticsKpis;
+  volume_trends: VolumeTrendPoint[];
+  risk_distribution: RiskDistributionBucket[];
+  mismatch_fields: MismatchFieldStat[];
+  document_types: DocumentTypeStat[];
+  forensic_signals: ForensicSignalStat[];
+  stage_latencies: StageLatencyStat[];
+  insights: IntelligenceInsight[];
+  is_synthetic_baseline: boolean;
+}

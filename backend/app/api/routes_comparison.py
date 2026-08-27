@@ -140,6 +140,34 @@ def get_comparison(case_id: str, db: Session = Depends(get_db)) -> CaseCompariso
             )
         )
 
+    # Also include synthetic/biometric cross-document findings (like facial_photo)
+    for field_name, finding in finding_by_field.items():
+        if field_name not in by_field and field_name == "facial_photo":
+            label = _FIELD_LABELS.get(field_name, "Facial Photo")
+            mismatched = finding.severity in ("medium", "high")
+            status = "mismatch" if mismatched else "consistent"
+            values = [
+                ComparisonValue(
+                    document_id=d.get("document_id", ""),
+                    file_name=d.get("file_name", ""),
+                    raw_value=d.get("value", "Face Photo"),
+                    normalized_value=d.get("value", "Face Photo"),
+                    confidence=100.0,
+                    agrees=not mismatched,
+                )
+                for d in (finding.documents_involved or [])
+            ]
+            rows_out.append(
+                ComparisonFieldRow(
+                    field_name=field_name,
+                    label=label,
+                    status=status,
+                    severity=finding.severity if mismatched else None,
+                    explanation=finding.explanation,
+                    values=values,
+                )
+            )
+
     # Mismatches first, then consistent fields.
     rows_out.sort(key=lambda r: (r.status != "mismatch", r.field_name))
     return CaseComparisonResponse(case_id=case_id, fields=rows_out)

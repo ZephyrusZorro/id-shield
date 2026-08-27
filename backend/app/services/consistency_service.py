@@ -37,6 +37,7 @@ _FIELD_LABELS = {
     "issue_date": "Date of Issue",
     "expiry_date": "Date of Expiry",
     "address": "Address",
+    "facial_photo": "Facial Photo",
 }
 
 # Severity per conflicting field — drives the risk engine later.
@@ -44,6 +45,7 @@ FIELD_SEVERITY = {
     "full_name": "high",
     "date_of_birth": "high",
     "document_number": "high",
+    "facial_photo": "high",
     "address": "medium",
     "gender": "medium",
     "nationality": "medium",

@@ -10,10 +10,12 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import (
     routes_analysis,
+    routes_analytics,
     routes_cases,
     routes_comparison,
     routes_dashboard,
     routes_demo,
+    routes_faces,
     routes_forensics,
     routes_health,
     routes_risk,
@@ -66,10 +68,12 @@ async def security_headers(request, call_next):  # noqa: ANN001, ANN201
 
 app.include_router(routes_health.router, prefix="/api", tags=["system"])
 app.include_router(routes_dashboard.router, prefix="/api", tags=["dashboard"])
+app.include_router(routes_analytics.router, prefix="/api", tags=["analytics"])
 app.include_router(routes_cases.router, prefix="/api", tags=["cases"])
 app.include_router(routes_analysis.router, prefix="/api", tags=["analysis"])
 app.include_router(routes_comparison.router, prefix="/api", tags=["comparison"])
 app.include_router(routes_forensics.router, prefix="/api", tags=["forensics"])
+app.include_router(routes_faces.router, prefix="/api", tags=["faces"])
 app.include_router(routes_risk.router, prefix="/api", tags=["risk"])
 app.include_router(routes_report.router, prefix="/api", tags=["report"])
 app.include_router(routes_demo.router, prefix="/api", tags=["demo"])

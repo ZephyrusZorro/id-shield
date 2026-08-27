@@ -44,12 +44,21 @@ function FieldBlock({ row }: { row: ComparisonFieldRow }) {
               className={v.agrees ? "" : "bg-red-50/60"}
             >
               <td className="px-5 py-3 text-xs font-medium text-slate-500 sm:w-56">
-                {v.file_name}
-                {!v.agrees && (
-                  <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700">
-                    differs
-                  </span>
-                )}
+                <div className="flex items-center">
+                  {row.field_name === "facial_photo" && v.document_id && (
+                    <img
+                      src={`/api/documents/${v.document_id}/face-crop`}
+                      alt={v.file_name}
+                      className="mr-2 h-6 w-6 rounded object-cover ring-1 ring-slate-200"
+                    />
+                  )}
+                  <span>{v.file_name}</span>
+                  {!v.agrees && (
+                    <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-red-700">
+                      differs
+                    </span>
+                  )}
+                </div>
               </td>
               <td className="px-5 py-3">
                 <span
