@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -158,6 +158,32 @@ function FaceCard({ face }: { face: FaceCropInfo }) {
               {Math.round(face.confidence * 100)}%
             </span>
           </div>
+
+          {/* Anti-spoofing and Presentation Attack Assessment */}
+          {face.anti_spoofing && (
+            <div
+              className={`rounded-xl p-2.5 text-[11px] border ${
+                face.anti_spoofing.status === "genuine_photo"
+                  ? "bg-emerald-50/70 dark:bg-emerald-950/40 border-emerald-200/80 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300"
+                  : face.anti_spoofing.status === "potential_screen_replay" ||
+                    face.anti_spoofing.status === "screen_or_glossy_replay"
+                    ? "bg-rose-50/70 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300"
+                    : "bg-amber-50/70 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300"
+              }`}
+            >
+              <div className="flex items-center justify-between font-bold">
+                <span className="capitalize">
+                  {face.anti_spoofing.status.replace(/_/g, " ")}
+                </span>
+                <span className="font-mono text-[10px]">
+                  Risk: {face.anti_spoofing.risk_score}/100
+                </span>
+              </div>
+              <p className="mt-1 text-[10px] leading-relaxed opacity-90">
+                {face.anti_spoofing.explanation}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>

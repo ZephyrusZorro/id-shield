@@ -43,6 +43,7 @@ export interface DocumentItem {
   file_size: number;
   document_type: string | null;
   type_confidence: number | null;
+  document_type_label?: string | null;
   processing_status: string;
   has_preview: boolean;
 }
@@ -58,8 +59,18 @@ export interface CaseDetail {
   applicant_phone?: string | null;
   applicant_email?: string | null;
   auto_notify_on_mismatch?: boolean;
+  review_status?: "pending_review" | "approved" | "rejected" | "needs_further_review" | null;
+  reviewer_name?: string | null;
+  reviewer_notes?: string | null;
+  reviewed_at?: string | null;
   created_at: string;
   documents: DocumentItem[];
+}
+
+export interface CaseReviewRequest {
+  decision: "approved" | "rejected" | "needs_further_review";
+  notes?: string;
+  reviewer_name?: string;
 }
 
 export interface HistoryItem {
@@ -215,19 +226,34 @@ export interface ComparisonValue {
 
 export type ComparisonStatus = "consistent" | "mismatch" | "single_source";
 
+export interface RuleEvaluationItem {
+  rule_id: string;
+  rule_name: string;
+  category: "identity" | "chronological" | "cross_document" | "structural";
+  status: "pass" | "warning" | "fail" | "not_applicable";
+  severity: "info" | "low" | "medium" | "high";
+  confidence: number;
+  explanation: string;
+  evidence?: Record<string, unknown> | null;
+}
+
 export interface ComparisonFieldRow {
   field_name: string;
   label: string;
   status: ComparisonStatus;
   severity: "high" | "medium" | null;
   explanation: string | null;
+  similarity?: number | null;
   values: ComparisonValue[];
 }
 
 export interface CaseComparisonResponse {
   case_id: string;
   fields: ComparisonFieldRow[];
+  rules_evaluated?: RuleEvaluationItem[];
+  overall_name_similarity?: number | null;
 }
+
 
 export interface ForensicItem {
   region: string;
@@ -253,6 +279,14 @@ export interface CaseForensicsResponse {
   documents: DocumentForensicsReport[];
 }
 
+export interface AntiSpoofingInfo {
+  status: "genuine_photo" | "potential_screen_replay" | "screen_or_glossy_replay" | "low_quality_capture";
+  risk_score: number;
+  moire_intensity: number;
+  glare_ratio: number;
+  explanation: string;
+}
+
 export interface FaceCropInfo {
   document_id: string;
   file_name: string;
@@ -264,6 +298,7 @@ export interface FaceCropInfo {
   brightness: number;
   contrast: number;
   has_crop: boolean;
+  anti_spoofing?: AntiSpoofingInfo | null;
 }
 
 export interface FaceMetrics {
@@ -429,3 +464,29 @@ export interface NotificationOut {
   created_at: string;
   provider_info?: Record<string, any> | null;
 }
+
+export interface VoiceBriefResponse {
+  case_id: string;
+  case_number: number;
+  applicant_name: string;
+  spoken_text: string;
+  summary_bullets: string[];
+  risk_level: string;
+  recommendation: string;
+  has_warnings: boolean;
+  risk_score?: number | null;
+}
+
+export interface VoiceQueryRequest {
+  query: string;
+  current_path?: string | null;
+}
+
+export interface VoiceQueryResponse {
+  answer: string;
+  action?: string | null;
+  category?: string | null;
+}
+
+
+

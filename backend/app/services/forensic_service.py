@@ -400,118 +400,274 @@ def _iou(a: list[int], b: list[int]) -> float:
 
 
 
+def _detect_metadata_tampering(file_path, w: int, h: int) -> list[ForensicDraft]:
+    """Inspect file header and metadata for photo editing software signatures."""
+    if file_path is None:
+        return []
+    from pathlib import Path
+    p = Path(file_path)
+    if not p.is_file():
+        return []
+
+    detected_tools: list[str] = []
+    suspicious_keywords = [
+        "photoshop", "gimp", "canva", "picsart", "pixelmator",
+        "paint.net", "coreldraw", "inkscape", "affinity", "illustrator"
+    ]
+
+    try:
+        # Read header and trailer bytes
+        raw_content = b""
+        with open(p, "rb") as fh:
+            raw_content = fh.read(65536).lower()
+        for kw in suspicious_keywords:
+            if kw.encode("latin-1") in raw_content:
+                detected_tools.append(kw.capitalize())
+
+        # Inspect PIL metadata
+        try:
+            from PIL import Image
+            with Image.open(p) as pil_img:
+                info_str = str(pil_img.info).lower()
+                for kw in suspicious_keywords:
+                    if kw in info_str and kw.capitalize() not in detected_tools:
+                        detected_tools.append(kw.capitalize())
+                exif = pil_img.getexif()
+                if exif:
+                    for tag_id, val in exif.items():
+                        v_str = str(val).lower()
+                        for kw in suspicious_keywords:
+                            if kw in v_str and kw.capitalize() not in detected_tools:
+                                detected_tools.append(kw.capitalize())
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    if not detected_tools:
+        return []
+
+    tools_str = ", ".join(sorted(set(detected_tools)))
+    return [
+        ForensicDraft(
+            region="header band",
+            finding_type="metadata_tamper_indicator",
+            severity="high",
+            score=0.85,
+            bbox=[0, 0, w, max(24, int(h * 0.12))],
+            explanation=(
+                f"Document metadata or file header contains image editing software signature "
+                f"('{tools_str}'). This indicates the document was digitally manipulated, "
+                f"re-rendered, or modified in post-processing software."
+            ),
+        )
+    ]
+
+
+def _detect_copy_move(gray: np.ndarray, doc_type: str | None) -> list[ForensicDraft]:
+    """Detect duplicated patches/elements within the document using ORB feature matching."""
+    h, w = gray.shape[:2]
+    if h < 200 or w < 200:
+        return []
+
+    try:
+        orb = cv2.ORB_create(nfeatures=600, fastThreshold=15)
+        kp, des = orb.detectAndCompute(gray, None)
+        if des is None or len(kp) < 15:
+            return []
+
+        bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
+        matches = bf.knnMatch(des, des, k=3)
+
+        good_pairs = []
+        for m in matches:
+            if len(m) > 1:
+                cand = m[1]
+                if cand.distance < 28:
+                    pt1 = kp[cand.queryIdx].pt
+                    pt2 = kp[cand.trainIdx].pt
+                    dx = pt1[0] - pt2[0]
+                    dy = pt1[1] - pt2[1]
+                    dist = float(np.hypot(dx, dy))
+                    if 60.0 < dist < (max(w, h) * 0.85):
+                        good_pairs.append((pt1, pt2, (round(dx / 12) * 12, round(dy / 12) * 12)))
+
+        if not good_pairs:
+            return []
+
+        from collections import Counter
+        vectors = [p[2] for p in good_pairs]
+        counts = Counter(vectors)
+        top_vector, top_count = counts.most_common(1)[0]
+
+        if top_count >= 5:
+            # Avoid false-positive on repetitive document lines / text paragraphs
+            dx_v, dy_v = top_vector
+            if abs(dx_v) <= 12 and bw > w * 0.45:
+                return []
+
+            matched_pts = [p[0] for p in good_pairs if p[2] == top_vector]
+            xs = [int(p[0]) for p in matched_pts]
+            ys = [int(p[1]) for p in matched_pts]
+            min_x, max_x = max(0, min(xs) - 16), min(w, max(xs) + 16)
+            min_y, max_y = max(0, min(ys) - 16), min(h, max(ys) + 16)
+            bw = max_x - min_x
+            bh = max_y - min_y
+
+            # Recheck width after matched_pts
+            if abs(dx_v) <= 12 and bw > w * 0.45:
+                return []
+
+            score = min(0.85, 0.45 + (top_count * 0.05))
+            region = _label_region((min_x + bw / 2) / w, (min_y + bh / 2) / h, doc_type)
+            if region.lower() in _STRUCTURAL_ZONES:
+                score = min(score, 0.25)
+
+            return [
+                ForensicDraft(
+                    region=region,
+                    finding_type="copy_move_anomaly",
+                    severity=_severity(score),
+                    score=round(score, 2),
+                    bbox=[min_x, min_y, bw, bh],
+                    explanation=(
+                        f"Detected {top_count} duplicated visual features with identical spatial "
+                        f"displacement in the {region}. This is an indicator of potential manipulation, not proof."
+                    ),
+                )
+            ]
+    except Exception:
+        pass
+    return []
+
+
+def _detect_noise_inconsistency(gray: np.ndarray, doc_type: str | None) -> list[ForensicDraft]:
+    """Detect regions whose high-frequency sensor noise standard deviation is statistically anomalous."""
+    h, w = gray.shape[:2]
+    if h < 200 or w < 200:
+        return []
+
+    try:
+        blur = cv2.medianBlur(gray, 3)
+        res = cv2.absdiff(gray, blur).astype(np.float32)
+
+        h_c, w_c = (h // _BLOCK) * _BLOCK, (w // _BLOCK) * _BLOCK
+        if h_c < _BLOCK * 4 or w_c < _BLOCK * 4:
+            return []
+
+        grid = res[:h_c, :w_c].reshape(h_c // _BLOCK, _BLOCK, w_c // _BLOCK, _BLOCK)
+        block_stds = grid.std(axis=(1, 3))
+
+        grad_x = cv2.Sobel(gray[:h_c, :w_c], cv2.CV_32F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(gray[:h_c, :w_c], cv2.CV_32F, 0, 1, ksize=3)
+        edge_mag = np.hypot(grad_x, grad_y)
+        edge_grid = edge_mag.reshape(h_c // _BLOCK, _BLOCK, w_c // _BLOCK, _BLOCK)
+        block_edges = (edge_grid > 50).sum(axis=(1, 3))
+
+        substrate_mask = block_edges < 35
+        if substrate_mask.sum() < 20:
+            return []
+
+        substrate_stds = block_stds[substrate_mask]
+        doc_noise_median = float(np.median(substrate_stds))
+
+        if doc_noise_median < 1.8:
+            return []
+
+        anom_blocks = (block_stds > (doc_noise_median * 3.0)) & substrate_mask
+        if anom_blocks.sum() < _MIN_CLUSTER_BLOCKS:
+            return []
+
+        return _cluster_findings(
+            block_stds,
+            floor=doc_noise_median * 2.6,
+            gray_shape=(h, w),
+            doc_type=doc_type,
+            finding_type="noise_variance_anomaly",
+            score_scale=doc_noise_median * 4.8,
+            extra_note=" Local high-frequency sensor noise standard deviation diverges significantly from surrounding substrate.",
+        )
+    except Exception:
+        return []
+
+
 def analyze_image(
-
     image_bgr_or_gray: np.ndarray,
-
     doc_type: str | None = None,
-
+    file_path=None,
 ) -> list[ForensicDraft]:
-
     """Run the transparent forensics pipeline over one document image.
 
-
-
-    Two independent detectors run and their findings are merged:
-
+    Detectors run and their findings are merged:
     1. Chromatic-noise uniformity (sensitive; scan-like documents).
-
-    2. Conservative error-level analysis (severity-capped; guards against
-
-       dramatizing photographic grain).
-
+    2. Conservative error-level analysis (severity-capped; guards against dramatizing photographic grain).
+    3. High-frequency sensor noise variance inconsistency.
+    4. Copy-move / clone-stamp feature duplication.
+    5. Image metadata / EXIF software editing signature audit.
     """
+    h, w = image_bgr_or_gray.shape[:2]
+    if h < 100 or w < 100:
+        return []
 
     if image_bgr_or_gray.ndim == 3:
-
-        h, w = image_bgr_or_gray.shape[:2]
-
         gray = cv2.cvtColor(image_bgr_or_gray, cv2.COLOR_BGR2GRAY)
-
         chroma_blocks, _ = _chroma_residual_blocks(image_bgr_or_gray)
-
     else:
-
-        h, w = image_bgr_or_gray.shape[:2]
-
         gray = image_bgr_or_gray
-
         chroma_blocks = None
-
-
 
     findings: list[ForensicDraft] = []
 
-
-
+    # 1. Chromatic-noise uniformity
     if chroma_blocks is not None:
-
         findings.extend(
-
             _cluster_findings(
-
                 chroma_blocks,
-
                 _CHROMA_FLOOR,
-
                 (h, w),
-
                 doc_type,
-
                 finding_type="chromatic_noise_anomaly",
-
                 score_scale=_SCORE_SCALE,
-
                 extra_note=(
-
-                    " Chroma-channel uniformity differs from the rest of "
-
-                    "the document."
-
+                    " Chroma-channel uniformity differs from the rest of the document."
                 ),
-
             )
-
         )
 
-
-
+    # 2. Error-Level Analysis (ELA)
     ela_floor = max(float(np.percentile(_ela_block_means(gray), 99.5)) * 1.15, 8.0)
-
     ela_findings = _cluster_findings(
-
         _ela_block_means(gray),
-
         ela_floor,
-
         (h, w),
-
         doc_type,
-
         finding_type="compression_anomaly",
-
         score_scale=_SCORE_SCALE * 1.4,
-
         extra_note=(
-
             " Compression-difference response differs from surrounding areas."
-
         ),
-
     )
-
-    # Keep ELA findings that do not overlap an existing chroma finding.
-
     for draft in ela_findings:
-
         if all(_iou(draft.bbox, f.bbox) < 0.3 for f in findings):
-
             findings.append(draft)
 
+    # 3. High-frequency noise variance anomaly
+    noise_findings = _detect_noise_inconsistency(gray, doc_type)
+    for draft in noise_findings:
+        if all(_iou(draft.bbox, f.bbox) < 0.35 for f in findings):
+            findings.append(draft)
 
+    # 4. Copy-Move / Duplication detection
+    cm_findings = _detect_copy_move(gray, doc_type)
+    for draft in cm_findings:
+        if all(_iou(draft.bbox, f.bbox) < 0.35 for f in findings):
+            findings.append(draft)
+
+    # 5. Metadata / Software tamper detection
+    meta_findings = _detect_metadata_tampering(file_path, w, h)
+    findings.extend(meta_findings)
 
     findings.sort(key=lambda d: d.score, reverse=True)
-
     return findings
 
 

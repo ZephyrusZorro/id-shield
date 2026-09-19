@@ -44,6 +44,7 @@ class FaceCropResult:
     contrast: float  # Pixel std deviation
     crop_path: str | None = None  # Relative path to saved face crop PNG
     features: dict = field(default_factory=dict)
+    anti_spoofing: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -238,6 +239,9 @@ def extract_face(
         except ValueError:
             crop_rel_path = str(crop_file)
 
+    # Compute anti-spoofing / presentation attack detection
+    anti_spoofing = _evaluate_anti_spoofing(face_crop, sharpness, contrast)
+
     return FaceCropResult(
         document_id=doc_id,
         file_name=file_name,
@@ -255,7 +259,79 @@ def extract_face(
             "lbp_hist": lbp_hist,
             "color_hist": color_hist_list,
         },
+        anti_spoofing=anti_spoofing,
     )
+
+
+def _evaluate_anti_spoofing(crop_bgr: np.ndarray, sharpness: float, contrast: float) -> dict:
+    """Analyze face crop for screen replay moiré patterns, specular glare, and capture quality."""
+    h, w = crop_bgr.shape[:2]
+    crop_gray = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2GRAY) if crop_bgr.ndim == 3 else crop_bgr
+    aligned = cv2.resize(crop_gray, (160, 160))
+
+    # 1. 2D Fast Fourier Transform for moiré / screen raster grid spikes
+    try:
+        f = np.fft.fft2(aligned.astype(np.float32))
+        fshift = np.fft.fftshift(f)
+        mag = np.log(np.abs(fshift) + 1.0)
+
+        cy, cx = 80, 80
+        Y, X = np.ogrid[:160, :160]
+        dist = np.sqrt((X - cx) ** 2 + (Y - cy) ** 2)
+        high_band = (dist >= 25) & (dist <= 75)
+        high_vals = mag[high_band]
+        peak = float(high_vals.max())
+        mean_val = float(high_vals.mean())
+        std_val = float(high_vals.std())
+        moire_intensity = float((peak - mean_val) / (std_val + 1e-5))
+    except Exception:
+        moire_intensity = 0.0
+
+    # 2. Specular glare / screen glass hotspot reflection
+    try:
+        if crop_bgr.ndim == 3:
+            hsv = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2HSV)
+            glare_mask = (hsv[:, :, 1] < 35) & (hsv[:, :, 2] > 245)
+            glare_ratio = float(glare_mask.sum() / max(1, h * w))
+        else:
+            glare_ratio = float((crop_gray > 250).sum() / max(1, h * w))
+    except Exception:
+        glare_ratio = 0.0
+
+    # 3. Status determination
+    if moire_intensity >= 4.6:
+        status = "potential_screen_replay"
+        risk_score = 75
+        explanation = (
+            f"High-frequency 2D spectral spikes detected (moiré intensity {moire_intensity:.1f}), "
+            f"characteristic of electronic screen subpixel grids or display replay."
+        )
+    elif glare_ratio >= 0.08:
+        status = "screen_or_glossy_replay"
+        risk_score = 65
+        explanation = (
+            f"Specular glare hotspot detected ({glare_ratio * 100:.1f}% area), "
+            f"typical of phone screen glass reflections or glossy re-photography."
+        )
+    elif sharpness < 25.0 or contrast < 20.0:
+        status = "low_quality_capture"
+        risk_score = 40
+        explanation = (
+            f"Suboptimal facial sharpness ({round(sharpness, 1)}) or contrast ({round(contrast, 1)}) "
+            f"impedes reliable biometric authentication."
+        )
+    else:
+        status = "genuine_photo"
+        risk_score = 10
+        explanation = "Natural optical micro-texture and continuous tone distribution detected."
+
+    return {
+        "status": status,
+        "risk_score": risk_score,
+        "moire_intensity": round(moire_intensity, 2),
+        "glare_ratio": round(glare_ratio, 3),
+        "explanation": explanation,
+    }
 
 
 def compare_two_faces(

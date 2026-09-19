@@ -4,6 +4,14 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
+class AntiSpoofingInfo(BaseModel):
+    status: str = "genuine_photo"  # genuine_photo | potential_screen_replay | screen_or_glossy_replay | low_quality_capture
+    risk_score: int = 10  # 0..100
+    moire_intensity: float = 0.0
+    glare_ratio: float = 0.0
+    explanation: str = "Natural optical characteristics detected."
+
+
 class FaceCropInfo(BaseModel):
     document_id: str
     file_name: str
@@ -15,6 +23,7 @@ class FaceCropInfo(BaseModel):
     brightness: float
     contrast: float
     has_crop: bool = True
+    anti_spoofing: AntiSpoofingInfo | None = None
 
 
 class FaceMetrics(BaseModel):

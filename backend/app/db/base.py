@@ -45,6 +45,14 @@ def _migrate_schema(engine) -> None:
                     conn.execute(text("ALTER TABLE cases ADD COLUMN applicant_email VARCHAR(320)"))
                 if "auto_notify_on_mismatch" not in cols:
                     conn.execute(text("ALTER TABLE cases ADD COLUMN auto_notify_on_mismatch BOOLEAN DEFAULT 0"))
+                if "review_status" not in cols:
+                    conn.execute(text("ALTER TABLE cases ADD COLUMN review_status VARCHAR(30) DEFAULT 'pending_review'"))
+                if "reviewer_name" not in cols:
+                    conn.execute(text("ALTER TABLE cases ADD COLUMN reviewer_name VARCHAR(120)"))
+                if "reviewer_notes" not in cols:
+                    conn.execute(text("ALTER TABLE cases ADD COLUMN reviewer_notes TEXT"))
+                if "reviewed_at" not in cols:
+                    conn.execute(text("ALTER TABLE cases ADD COLUMN reviewed_at TIMESTAMP"))
     except Exception:  # noqa: BLE001
         pass
 

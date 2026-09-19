@@ -27,6 +27,17 @@ _FIELD_FACTOR = {
     "facial_photo": "face_mismatch",
 }
 
+_EXTENDED_FIELD_FACTOR = {
+    "father_name": "name_mismatch",
+    "pincode": "address_mismatch",
+    "RULE-AGE-001": "dob_mismatch",
+    "RULE-CHRONO-001": "document_number_mismatch",
+    "RULE-PAN-001": "name_mismatch",
+    "RULE-FATHER-001": "name_mismatch",
+}
+
+
+
 
 @lru_cache(maxsize=1)
 def load_config() -> dict:
@@ -100,8 +111,9 @@ def evaluate(inp: RiskInput) -> dict:
     # --- increases -------------------------------------------------------
     seen_conflicts: set[str] = set()
     for c in inp.conflict_fields:
-        key = _FIELD_FACTOR.get(c["field_name"])
+        key = _FIELD_FACTOR.get(c["field_name"]) or _EXTENDED_FIELD_FACTOR.get(c["field_name"])
         if key is None or c.get("severity") not in ("medium", "high"):
+
             continue
         seen_conflicts.add(key)
         label = c["field_name"].replace("_", " ")

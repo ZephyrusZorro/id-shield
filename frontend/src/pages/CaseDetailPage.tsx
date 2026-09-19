@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   MessageSquare,
   Send,
+  Volume2,
 } from "lucide-react";
 import { PageHeader } from "../components/layout/PageHeader";
 import { ValidationTab } from "../components/documents/ValidationTab";
@@ -18,6 +19,8 @@ import { ReportTab } from "../components/documents/ReportTab";
 import { NotificationsTab } from "../components/notifications/NotificationsTab";
 import { NotificationModal } from "../components/notifications/NotificationModal";
 import { DocImage } from "../components/documents/DocImage";
+import { DocumentTypeSelector } from "../components/documents/DocumentTypeSelector";
+import { ReviewDispositionCard } from "../components/documents/ReviewDispositionCard";
 import { useApi } from "../hooks/useApi";
 import type { RiskReport, CaseDetail, DocumentDetail } from "../types/api";
 import { TrendingDown, TrendingUp, ShieldAlert, ShieldCheck, HelpCircle } from "lucide-react";
@@ -164,11 +167,17 @@ function ConfidenceChip({ value }: { value: number | null }) {
   );
 }
 
-function DocumentsTab({ caseData }: { caseData: CaseDetail }) {
+function DocumentsTab({
+  caseData,
+  onRefresh,
+}: {
+  caseData: CaseDetail;
+  onRefresh?: () => void;
+}) {
   const [selectedId, setSelectedId] = useState<string | null>(
     caseData.documents[0]?.id ?? null,
   );
-  const { data: doc, loading, error } = useApi<DocumentDetail>(
+  const { data: doc, loading, error, reload: reloadDoc } = useApi<DocumentDetail>(
     selectedId ? `/api/documents/${selectedId}` : null,
   );
 
@@ -229,7 +238,22 @@ function DocumentsTab({ caseData }: { caseData: CaseDetail }) {
                   <FileText size={40} className="text-slate-400 dark:text-slate-600" aria-hidden="true" />
                 </div>
               )}
-              <dl className="mt-4 space-y-2 text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800/80 pt-3">
+              <dl className="mt-4 space-y-3 text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800/80 pt-3">
+                <div>
+                  <dt className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-1">
+                    Document Type
+                  </dt>
+                  <dd>
+                    <DocumentTypeSelector
+                      caseId={caseData.id}
+                      document={doc}
+                      onUpdated={() => {
+                        reloadDoc();
+                        onRefresh?.();
+                      }}
+                    />
+                  </dd>
+                </div>
                 <div className="flex justify-between">
                   <dt>OCR Engine</dt>
                   <dd className="font-semibold text-navy-900 dark:text-slate-200">{doc.ocr_engine ?? "—"}</dd>
@@ -306,6 +330,17 @@ export function CaseDetailPage() {
     reload,
   } = useApi<CaseDetail>(caseId ? `/api/cases/${caseId}` : null);
 
+  useEffect(() => {
+    const handleTabSwitch = (e: any) => {
+      const targetTab = e.detail;
+      if (targetTab && TABS.includes(targetTab)) {
+        setTab(targetTab);
+      }
+    };
+    window.addEventListener("idshield:switch-tab", handleTabSwitch);
+    return () => window.removeEventListener("idshield:switch-tab", handleTabSwitch);
+  }, []);
+
   return (
     <div className="mx-auto max-w-6xl animate-fade-in space-y-6">
       <button
@@ -321,14 +356,27 @@ export function CaseDetailPage() {
         subtitle="Multi-modal forensic evidence and explainable validation workspace"
         actions={
           caseData && (
-            <button
-              type="button"
-              onClick={() => setNotificationModalOpen(true)}
-              className="btn-primary shadow-glow-blue flex items-center gap-2 text-xs"
-            >
-              <Send size={13} />
-              <span>Notify Applicant</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(new CustomEvent("idshield:voice-speak-brief"));
+                }}
+                className="btn-secondary flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/50"
+                title="Read plain oral summary of this case for accessibility"
+              >
+                <Volume2 size={13} />
+                <span>Voice Summary</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setNotificationModalOpen(true)}
+                className="btn-primary shadow-glow-blue flex items-center gap-2 text-xs"
+              >
+                <Send size={13} />
+                <span>Notify Applicant</span>
+              </button>
+            </div>
           )
         }
       />
@@ -406,6 +454,8 @@ export function CaseDetailPage() {
 
               {caseId && <RiskPanel caseId={caseId} />}
 
+              <ReviewDispositionCard caseData={caseData} onReviewSubmitted={reload} />
+
               {caseData.documents.length > 0 ? (
                 <div>
                   <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-navy-900 dark:text-white">
@@ -426,11 +476,16 @@ export function CaseDetailPage() {
                             <FileText size={32} className="text-slate-400 dark:text-slate-600" aria-hidden="true" />
                           </div>
                         )}
-                        <figcaption className="px-3 py-2 border-t border-slate-100 dark:border-slate-800/80">
-                          <p className="truncate text-xs font-bold text-navy-900 dark:text-white">{d.file_name}</p>
-                          <p className="text-[11px] capitalize text-slate-500 dark:text-slate-400 font-medium">
-                            {d.document_type?.replace(/_/g, " ") ?? "unclassified"}
+                        <figcaption className="p-3 border-t border-slate-100 dark:border-slate-800/80 space-y-2">
+                          <p className="truncate text-xs font-bold text-navy-900 dark:text-white" title={d.file_name}>
+                            {d.file_name}
                           </p>
+                          <DocumentTypeSelector
+                            caseId={caseData.id}
+                            document={d}
+                            compact={true}
+                            onUpdated={() => reload()}
+                          />
                         </figcaption>
                       </figure>
                     ))}
@@ -458,7 +513,9 @@ export function CaseDetailPage() {
             </div>
           )}
 
-          {caseData && tab === "Documents" && <DocumentsTab caseData={caseData} />}
+          {caseData && tab === "Documents" && (
+            <DocumentsTab caseData={caseData} onRefresh={() => reload()} />
+          )}
 
           {caseData && tab === "Validation" && caseId && <ValidationTab caseId={caseId} />}
 

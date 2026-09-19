@@ -21,6 +21,7 @@ from app.api import (
     routes_notifications,
     routes_risk,
     routes_report,
+    routes_voice,
 )
 from app.core.config import settings
 from app.core.logging import configure_logging, get_logger
@@ -81,6 +82,7 @@ app.include_router(routes_faces.router, prefix="/api", tags=["faces"])
 app.include_router(routes_notifications.router, prefix="/api", tags=["notifications"])
 app.include_router(routes_risk.router, prefix="/api", tags=["risk"])
 app.include_router(routes_report.router, prefix="/api", tags=["report"])
+app.include_router(routes_voice.router, prefix="/api", tags=["voice"])
 app.include_router(routes_demo.router, prefix="/api", tags=["demo"])
 
 # ---- Production single-origin hosting -------------------------------------

@@ -168,6 +168,53 @@ def get_comparison(case_id: str, db: Session = Depends(get_db)) -> CaseCompariso
                 )
             )
 
+    from app.schemas.comparison import RuleEvaluationItem
+    from app.services import rule_engine
+
+    # Prepare document data for rule evaluation
+    docs_for_rules = []
+    for d in docs:
+        fields_for_doc = {
+            row.field_name: (row.normalized_value or row.raw_value)
+            for row in field_rows
+            if row.document_id == d.id
+        }
+        docs_for_rules.append({
+            "document_id": d.id,
+            "file_name": d.file_name,
+            "fields": fields_for_doc,
+            "document_type": d.document_type,
+        })
+
+    rule_evals = rule_engine.run_custom_rule_engine(docs_for_rules)
+    rules_out = [
+        RuleEvaluationItem(
+            rule_id=r.rule_id,
+            rule_name=r.rule_name,
+            category=r.category,
+            status=r.status,
+            severity=r.severity,
+            confidence=r.confidence,
+            explanation=r.explanation,
+            evidence=r.evidence,
+        )
+        for r in rule_evals
+    ]
+
+    sim_matrix = rule_engine.evaluate_name_similarity_matrix(docs_for_rules)
+    overall_name_sim = sim_matrix.get("overall_similarity")
+
+    # Add similarity score to full_name comparison row if present
+    for r in rows_out:
+        if r.field_name == "full_name":
+            r.similarity = overall_name_sim
+
     # Mismatches first, then consistent fields.
     rows_out.sort(key=lambda r: (r.status != "mismatch", r.field_name))
-    return CaseComparisonResponse(case_id=case_id, fields=rows_out)
+    return CaseComparisonResponse(
+        case_id=case_id,
+        fields=rows_out,
+        rules_evaluated=rules_out,
+        overall_name_similarity=overall_name_sim,
+    )
+
