@@ -9,6 +9,7 @@ import {
   MessageSquare,
   Send,
   Volume2,
+  Layers,
 } from "lucide-react";
 import { PageHeader } from "../components/layout/PageHeader";
 import { ValidationTab } from "../components/documents/ValidationTab";
@@ -266,6 +267,17 @@ function DocumentsTab({
                   <dt>SHA-256 Hash</dt>
                   <dd className="font-mono text-[11px] text-navy-900 dark:text-slate-300">{doc.file_hash_prefix ?? "—"}</dd>
                 </div>
+                <div className="flex flex-col gap-1 border-t border-slate-100 dark:border-slate-800/80 pt-2.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-slate-500 dark:text-slate-400">Indic Multilingual OCR (14)</span>
+                    <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300 ring-1 ring-indigo-500/20">
+                      Extension Ready
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-tight">
+                    Hindi (हिंदी), Kannada (ಕನ್ನಡ), Urdu (اردو), Malayalam (മലയാളം), Tamil (தமிழ்), Telugu (తెలుగు)
+                  </p>
+                </div>
               </dl>
             </div>
 
@@ -491,6 +503,14 @@ export function CaseDetailPage() {
                     ))}
                   </div>
                   <div className="mt-5 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setTab("Comparison")}
+                      className="btn-secondary text-xs text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800"
+                    >
+                      <Layers size={13} />
+                      <span>Inspect Evidence Graph (12)</span>
+                    </button>
                     <button type="button" onClick={() => setTab("Documents")} className="btn-secondary text-xs">
                       Inspect Extracted Fields
                     </button>
@@ -500,7 +520,7 @@ export function CaseDetailPage() {
                     <button
                       type="button"
                       onClick={() => setNotificationModalOpen(true)}
-                      className="btn-secondary text-xs text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800"
+                      className="btn-secondary text-xs text-slate-600 dark:text-slate-300"
                     >
                       <MessageSquare size={13} />
                       <span>Send Discrepancy Notice</span>

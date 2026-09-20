@@ -88,6 +88,71 @@ def _get_alt_cascade() -> cv2.CascadeClassifier | None:
     return None
 
 
+def _get_eye_cascade() -> cv2.CascadeClassifier | None:
+    """Load Haar Cascade for eye detection to confirm human portrait landmarks."""
+    try:
+        cascade_path = cv2.data.haarcascades + "haarcascade_eye.xml"
+        cascade = cv2.CascadeClassifier(cascade_path)
+        if not cascade.empty():
+            return cascade
+    except Exception:
+        pass
+    return None
+
+
+def _box_iou(box_a, box_b) -> float:
+    xa, ya, wa, ha = int(box_a[0]), int(box_a[1]), int(box_a[2]), int(box_a[3])
+    xb, yb, wb, hb = int(box_b[0]), int(box_b[1]), int(box_b[2]), int(box_b[3])
+    ix = max(0, min(xa + wa, xb + wb) - max(xa, xb))
+    iy = max(0, min(ya + ha, yb + hb) - max(ya, yb))
+    inter = ix * iy
+    if inter <= 0:
+        return 0.0
+    union = (wa * ha) + (wb * hb) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _score_face_candidate(box, gray_image: np.ndarray, eye_cascade, color_image: np.ndarray | None = None) -> float:
+    """Score face candidates to reliably separate real portrait photos from background watermarks, emblems, and printed text."""
+    x, y, bw, bh = int(box[0]), int(box[1]), int(box[2]), int(box[3])
+    crop_gray = gray_image[y : y + bh, x : x + bw]
+    if crop_gray.size == 0:
+        return -999.0
+    contrast = float(crop_gray.std())
+    # Heavy penalty on washed-out faint watermarks/emblems (contrast < 22)
+    if contrast < 22.0:
+        return -500.0 + contrast
+
+    # Skin tone analysis: real document portraits contain human skin pigmentation
+    skin_score = 0.0
+    if color_image is not None and color_image.ndim == 3 and color_image.shape[2] == 3:
+        crop_bgr = color_image[y : y + bh, x : x + bw]
+        if crop_bgr.size > 0:
+            hsv = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2HSV)
+            h, s, v = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
+            skin_mask = (((h <= 25) | (h >= 170)) & (s >= 25) & (s <= 220) & (v >= 40))
+            skin_ratio = float(skin_mask.mean())
+            # Text / emblems have virtually no skin pixels (< 0.10)
+            if skin_ratio < 0.10:
+                return -400.0 + (skin_ratio * 100.0)
+            skin_score = skin_ratio * 160.0
+
+    upper = crop_gray[: int(bh * 0.65), :]
+    eyes = eye_cascade.detectMultiScale(upper, 1.1, 2) if eye_cascade is not None else []
+    eye_bonus = min(len(eyes), 2) * 25.0
+
+    img_h, img_w = gray_image.shape[:2]
+    size_ratio = bw / img_w
+    # Ideal document photo size is between 8% and 45% of document width
+    size_score = 30.0 if (0.08 <= size_ratio <= 0.45) else -20.0
+
+    # Dead center on Indian IDs is usually where watermark/emblem sits
+    center_dist_x = abs((x + bw / 2) - (img_w / 2)) / (img_w / 2)
+    pos_bonus = 15.0 if center_dist_x > 0.2 else 0.0
+
+    return skin_score + (contrast * 1.5) + eye_bonus + size_score + pos_bonus
+
+
 def _compute_lbp(gray: np.ndarray) -> np.ndarray:
     """Calculate Local Binary Patterns (LBP) texture descriptor."""
     h, w = gray.shape
@@ -149,34 +214,50 @@ def extract_face(
     h, w = image.shape[:2]
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
 
-    # 1. Try Cascade detection
+    # 1. Try Cascade detection across both default and alt cascades
+    all_candidates = []
     cascade = _get_face_cascade()
-    faces = []
     if cascade is not None:
-        faces = cascade.detectMultiScale(
+        c1_faces = cascade.detectMultiScale(
             gray,
             scaleFactor=1.08,
             minNeighbors=4,
             minSize=(int(w * 0.08), int(h * 0.08)),
         )
+        if len(c1_faces) > 0:
+            all_candidates.extend(list(c1_faces))
 
-    # 2. Try Alt Cascade if default found nothing
-    if len(faces) == 0:
-        alt_cascade = _get_alt_cascade()
-        if alt_cascade is not None:
-            faces = alt_cascade.detectMultiScale(
-                gray,
-                scaleFactor=1.05,
-                minNeighbors=3,
-                minSize=(int(w * 0.08), int(h * 0.08)),
-            )
+    alt_cascade = _get_alt_cascade()
+    if alt_cascade is not None:
+        c2_faces = alt_cascade.detectMultiScale(
+            gray,
+            scaleFactor=1.05,
+            minNeighbors=3,
+            minSize=(int(w * 0.08), int(h * 0.08)),
+        )
+        if len(c2_faces) > 0:
+            all_candidates.extend(list(c2_faces))
+
+    eye_cascade = _get_eye_cascade()
+
+    # Deduplicate candidate boxes using IOU
+    unique_candidates = []
+    for box in all_candidates:
+        b_tuple = (int(box[0]), int(box[1]), int(box[2]), int(box[3]))
+        if not any(_box_iou(b_tuple, u) > 0.4 for u in unique_candidates):
+            unique_candidates.append(b_tuple)
 
     detection_method = "cascade"
     best_box = None
 
-    if len(faces) > 0:
-        # Choose the largest detected face box
-        best_box = max(faces, key=lambda b: b[2] * b[3])
+    if unique_candidates:
+        # Prioritize candidates with genuine photo contrast (std >= 22.0) over faint watermarks
+        viable = [
+            b for b in unique_candidates
+            if float(gray[b[1] : b[1] + b[3], b[0] : b[0] + b[2]].std()) >= 22.0
+        ]
+        pool = viable if viable else unique_candidates
+        best_box = max(pool, key=lambda b: _score_face_candidate(b, gray, eye_cascade, color_image=image))
         x, y, fw, fh = int(best_box[0]), int(best_box[1]), int(best_box[2]), int(best_box[3])
         confidence = 0.90
     else:

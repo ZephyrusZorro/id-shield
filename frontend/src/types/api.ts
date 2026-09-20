@@ -247,11 +247,58 @@ export interface ComparisonFieldRow {
   values: ComparisonValue[];
 }
 
+export interface OtherDocValue {
+  doc_id: string;
+  doc_name: string;
+  doc_type?: string | null;
+  value: string;
+}
+
+export interface EvidenceFusionRow {
+  field_name: string;
+  label: string;
+  ocr_value?: string | null;
+  ocr_confidence?: number | null;
+  qr_value?: string | null;
+  qr_confidence?: number | null;
+  mrz_value?: string | null;
+  mrz_confidence?: number | null;
+  other_docs: OtherDocValue[];
+  consensus_value?: string | null;
+  agreement_status: "unanimous" | "majority_conflict" | "mismatch" | "single_source";
+  conflict_summary?: string | null;
+  caution_level: "normal" | "elevated" | "high";
+}
+
+export interface GraphNode {
+  id: string;
+  label: string;
+  type: "person" | "document" | "field";
+  status: "verified" | "mismatch" | "warning" | "neutral";
+  value?: string | null;
+  confidence?: number | null;
+  details?: Record<string, any> | null;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  label?: string | null;
+  status: "agree" | "conflict" | "neutral";
+}
+
+export interface EvidenceGraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
 export interface CaseComparisonResponse {
   case_id: string;
   fields: ComparisonFieldRow[];
   rules_evaluated?: RuleEvaluationItem[];
   overall_name_similarity?: number | null;
+  fusion_matrix?: EvidenceFusionRow[];
+  evidence_graph?: EvidenceGraphData | null;
 }
 
 

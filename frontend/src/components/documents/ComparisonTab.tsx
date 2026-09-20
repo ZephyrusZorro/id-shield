@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -8,6 +9,9 @@ import {
   Calendar,
   UserCheck,
   Hash,
+  Layers,
+  Scale,
+  FileText,
 } from "lucide-react";
 import { useApi } from "../../hooks/useApi";
 import type {
@@ -15,12 +19,13 @@ import type {
   ComparisonFieldRow,
   RuleEvaluationItem,
 } from "../../types/api";
+import { EvidenceGraph } from "./EvidenceGraph";
+import { EvidenceFusionMatrix } from "./EvidenceFusionMatrix";
 
 function RuleCard({ rule }: { rule: RuleEvaluationItem }) {
   const isPass = rule.status === "pass";
   const isFail = rule.status === "fail";
   const isWarn = rule.status === "warning";
-
 
   const getRuleIcon = () => {
     if (rule.rule_id.includes("AGE")) return <Calendar size={16} />;
@@ -201,6 +206,7 @@ function FieldBlock({ row }: { row: ComparisonFieldRow }) {
 }
 
 export function ComparisonTab({ caseId }: { caseId: string }) {
+  const [viewMode, setViewMode] = useState<"graph" | "fusion" | "ledger">("graph");
   const { data, loading, error } = useApi<CaseComparisonResponse>(
     `/api/cases/${caseId}/comparison`,
   );
@@ -234,32 +240,84 @@ export function ComparisonTab({ caseId }: { caseId: string }) {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Summary strip */}
-      <div className="card flex flex-wrap items-center gap-x-6 gap-y-2 p-4">
-        <p className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
-          Cross-Document Evidence Fusion
-        </p>
-        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-          <CheckCircle2 size={15} aria-hidden="true" /> {consistent} Consistent Fields
-        </span>
-        <span
-          className={`inline-flex items-center gap-1.5 text-xs font-bold ${
-            mismatches > 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-400 dark:text-slate-500"
-          }`}
-        >
-          <AlertTriangle size={15} aria-hidden="true" /> {mismatches} Field Discrepanc{mismatches === 1 ? "y" : "ies"}
-        </span>
-        {ruleViolations > 0 && (
-          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400">
-            <ShieldAlert size={15} /> {ruleViolations} Rule Violation{ruleViolations === 1 ? "" : "s"}
+      {/* Summary strip with view mode toggle */}
+      <div className="card flex flex-wrap items-center justify-between gap-4 p-4">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white">
+            Cross-Document Evidence Fusion
+          </p>
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 size={15} aria-hidden="true" /> {consistent} Consistent Fields
           </span>
-        )}
-        <span className="ml-auto text-[11px] text-slate-400 dark:text-slate-500 font-medium">
-          Multi-source agreement strengthens verification confidence.
-        </span>
+          <span
+            className={`inline-flex items-center gap-1.5 text-xs font-bold ${
+              mismatches > 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-400 dark:text-slate-500"
+            }`}
+          >
+            <AlertTriangle size={15} aria-hidden="true" /> {mismatches} Field Discrepanc{mismatches === 1 ? "y" : "ies"}
+          </span>
+          {ruleViolations > 0 && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400">
+              <ShieldAlert size={15} /> {ruleViolations} Rule Violation{ruleViolations === 1 ? "" : "s"}
+            </span>
+          )}
+        </div>
+
+        {/* View Mode Toggle */}
+        <div className="flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+          <button
+            type="button"
+            onClick={() => setViewMode("graph")}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+              viewMode === "graph"
+                ? "bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-400"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+            }`}
+          >
+            <Layers size={14} />
+            <span>Evidence Graph (12)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("fusion")}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+              viewMode === "fusion"
+                ? "bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-400"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+            }`}
+          >
+            <Scale size={14} />
+            <span>Fusion Matrix (4 &amp; 6)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("ledger")}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${
+              viewMode === "ledger"
+                ? "bg-white text-blue-600 shadow-sm dark:bg-slate-900 dark:text-blue-400"
+                : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+            }`}
+          >
+            <FileText size={14} />
+            <span>Field Ledger</span>
+          </button>
+        </div>
       </div>
 
-      {/* Verification Rule Engine Results */}
+      {/* View 1: Evidence Graph (Workflow Module 12) */}
+      {viewMode === "graph" && data.evidence_graph && (
+        <EvidenceGraph
+          data={data.evidence_graph}
+          overallRisk={mismatches > 0 ? 65 : 15}
+        />
+      )}
+
+      {/* View 2: Multi-Source Evidence Fusion (Workflow Modules 4 & 6) */}
+      {viewMode === "fusion" && data.fusion_matrix && (
+        <EvidenceFusionMatrix rows={data.fusion_matrix} />
+      )}
+
+      {/* Verification Rule Engine Results (Always visible below graph/matrix or in ledger) */}
       {data.rules_evaluated && data.rules_evaluated.length > 0 && (
         <section className="space-y-3">
           <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -273,17 +331,19 @@ export function ComparisonTab({ caseId }: { caseId: string }) {
         </section>
       )}
 
-      {/* Cross-Document Field Ledger */}
-      <section className="space-y-3">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-          Multi-Document Field Comparison Matrix
-        </h3>
-        <div className="space-y-4">
-          {data.fields.map((row) => (
-            <FieldBlock key={row.field_name} row={row} />
-          ))}
-        </div>
-      </section>
+      {/* View 3: Cross-Document Field Ledger */}
+      {viewMode === "ledger" && (
+        <section className="space-y-3">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            Multi-Document Field Comparison Matrix
+          </h3>
+          <div className="space-y-4">
+            {data.fields.map((row) => (
+              <FieldBlock key={row.field_name} row={row} />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

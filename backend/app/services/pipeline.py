@@ -109,12 +109,42 @@ def _run_stage(db: Session, stage_row: AnalysisStage, fn, ctx: StageContext, doc
 
 
 def _stage_preprocess(db: Session, docs: list[Document], ctx: StageContext) -> dict | None:
+    from app.services.preprocessing_service import assess_image_quality
+
     failures: list[str] = []
+    quality_warnings: list[str] = []
     for doc in docs:
         src = settings.upload_dir / doc.original_path
         out = src.with_name(src.stem + "_processed.png")
         try:
             image = load_image(src)
+            # Evaluate image quality (Module 2: Blur, Resolution, Glare)
+            quality = assess_image_quality(image)
+            db.execute(
+                delete(ValidationResult).where(
+                    ValidationResult.document_id == doc.id,
+                    ValidationResult.check_type == "Image quality check",
+                )
+            )
+            db.add(
+                ValidationResult(
+                    document_id=doc.id,
+                    check_type="Image quality check",
+                    status=quality["status"],
+                    message=quality["message"],
+                    evidence={
+                        "sharpness": quality["sharpness"],
+                        "sharpness_status": quality["sharpness_status"],
+                        "resolution": quality["resolution"],
+                        "resolution_status": quality["resolution_status"],
+                        "glare_percentage": quality["glare_percentage"],
+                        "trust_ocr": quality["trust_ocr"],
+                    },
+                )
+            )
+            if quality["status"] in ("fail", "warning"):
+                quality_warnings.append(f"{doc.file_name}: {quality['message']}")
+
             meta = preprocess(image, out)
             ctx.processed[doc.id] = out
             doc.processed_path = str(out.relative_to(settings.upload_dir))
@@ -123,6 +153,8 @@ def _stage_preprocess(db: Session, docs: list[Document], ctx: StageContext) -> d
             failures.append(f"{doc.file_name}: {exc}")
     if failures:
         return {"warning": True, "message": "; ".join(failures)[:400]}
+    if quality_warnings:
+        return {"warning": True, "message": "; ".join(quality_warnings)[:400]}
     return None
 
 
@@ -220,8 +252,8 @@ def _stage_validate(db: Session, docs: list[Document], ctx: StageContext) -> dic
         drafts = validation_service.validate_document(
             doc.document_type, fields_map, ocr.full_text if ocr is not None else None
         )
-        # Preserve rows owned by other stages (QR cross-check, duplicates).
-        preserved = {"Duplicate / reuse"}
+        # Preserve rows owned by other stages (QR cross-check, duplicates, quality, faces).
+        preserved = {"Duplicate / reuse", "Image quality check", "Face photo extraction"}
         old_rows = db.scalars(
             select(ValidationResult).where(ValidationResult.document_id == doc.id)
         ).all()

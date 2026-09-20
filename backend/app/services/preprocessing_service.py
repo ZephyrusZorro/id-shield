@@ -236,7 +236,6 @@ def preprocess(
         gray = enhance_contrast(gray)
         steps.append("contrast enhancement (CLAHE)")
 
-    # 8. Unsharp mask sharpening
     if apply_sharpen:
         gray = sharpen_image(gray)
         steps.append("text sharpening")
@@ -256,5 +255,73 @@ def preprocess(
         "denoised": apply_denoise,
         "contrast_enhanced": apply_clahe,
         "sharpened": apply_sharpen,
+    }
+
+
+def assess_image_quality(image_bgr: np.ndarray) -> dict:
+    """Assess document image clarity before OCR/QR/MRZ processing.
+
+    Evaluates:
+    - Blur / Sharpness (Laplacian variance)
+    - Resolution adequacy
+    - Glare / Overexposure / Extreme lighting
+    - OCR trust verdict: 'If quality is poor -> don't trust OCR result'
+    """
+    h, w = image_bgr.shape[:2]
+    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY) if image_bgr.ndim == 3 else image_bgr
+
+    # 1. Blur / Sharpness via Laplacian variance
+    laplacian_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    sharpness_status = "good" if laplacian_var >= 100.0 else ("acceptable" if laplacian_var >= 50.0 else "poor")
+
+    # 2. Resolution check
+    min_side = min(h, w)
+    total_pixels = h * w
+    res_status = "good" if (min_side >= 800 and total_pixels >= 600_000) else ("acceptable" if min_side >= 500 else "poor")
+
+    # 3. Glare & Brightness analysis
+    mean_brightness = float(np.mean(gray))
+    glare_fraction = float(np.mean(gray >= 250))
+    dark_fraction = float(np.mean(gray <= 20))
+    glare_status = "poor" if (glare_fraction > 0.15 or mean_brightness > 235) else (
+        "warning" if (glare_fraction > 0.08 or mean_brightness < 40) else "good"
+    )
+
+    # 4. Overall Trust Verdict
+    issues = []
+    if sharpness_status == "poor":
+        issues.append(f"Excessive blur detected (sharpness: {laplacian_var:.1f})")
+    elif sharpness_status == "acceptable":
+        issues.append(f"Moderate blur (sharpness: {laplacian_var:.1f})")
+
+    if res_status == "poor":
+        issues.append(f"Low resolution ({w}x{h} px)")
+    if glare_status == "poor":
+        issues.append(f"Severe glare/overexposure ({glare_fraction * 100:.1f}% saturated pixels)")
+
+    is_poor = (sharpness_status == "poor" and res_status == "poor") or (sharpness_status == "poor" and glare_status == "poor")
+    is_warning = len(issues) > 0 and not is_poor
+
+    status = "fail" if is_poor else ("warning" if is_warning else "pass")
+    trust_ocr = not is_poor
+
+    if is_poor:
+        verdict_msg = f"Poor image quality: {', '.join(issues)}. Do not trust OCR results without manual verification."
+    elif is_warning:
+        verdict_msg = f"Acceptable image clarity with minor concerns: {', '.join(issues)}."
+    else:
+        verdict_msg = f"Excellent image clarity (Sharpness: {laplacian_var:.1f}, Resolution: {w}x{h}, Glare: {glare_fraction * 100:.1f}%). OCR result is trusted."
+
+    return {
+        "status": status,
+        "trust_ocr": trust_ocr,
+        "sharpness": round(laplacian_var, 1),
+        "sharpness_status": sharpness_status,
+        "resolution": f"{w}x{h}",
+        "resolution_status": res_status,
+        "glare_percentage": round(glare_fraction * 100, 1),
+        "brightness": round(mean_brightness, 1),
+        "glare_status": glare_status,
+        "message": verdict_msg,
     }
 

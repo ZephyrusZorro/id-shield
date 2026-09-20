@@ -591,6 +591,95 @@ def _detect_noise_inconsistency(gray: np.ndarray, doc_type: str | None) -> list[
         return []
 
 
+def _detect_suspicious_text_replacement(gray: np.ndarray, doc_type: str | None) -> list[ForensicDraft]:
+    """Detect suspicious text replacement indicators.
+
+    Identifies localized text patches with background luminance discontinuity,
+    font thickness/sharpness disparity, or rectangular bounding box boundaries.
+    """
+    h, w = gray.shape[:2]
+    if h < 250 or w < 250:
+        return []
+
+    try:
+        # 1. Binarize to isolate candidate text components
+        thresh = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 10
+        )
+
+        # Morphological dilation horizontally to merge letters into words/field boxes
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 3))
+        dilated = cv2.morphologyEx(thresh, cv2.MORPH_DILATE, kernel)
+
+        # Global document background estimate (pixels that are non-text)
+        non_text_mask = thresh == 0
+        if non_text_mask.sum() < 1000:
+            return []
+        global_bg_median = float(np.median(gray[non_text_mask]))
+
+        # Find connected components (candidate text field boxes)
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(dilated, connectivity=8)
+
+        drafts = []
+        for i in range(1, num_labels):
+            x, y, bw, bh, area = stats[i]
+            # Filter for plausible identity field text regions (e.g. name, DOB, ID number)
+            if bw < 50 or bh < 12 or bw > w * 0.75 or bh > 90 or area < 200:
+                continue
+
+            # Check local background surrounding the text inside the bbox
+            patch = gray[y : y + bh, x : x + bw]
+            patch_non_text = thresh[y : y + bh, x : x + bw] == 0
+            if patch_non_text.sum() < 50:
+                continue
+
+            local_bg = float(np.median(patch[patch_non_text]))
+            bg_diff = abs(local_bg - global_bg_median)
+
+            # Legitimate paper substrates are light (typically > 170).
+            # Text replacement patches occur when a white/off-white patch is pasted onto paper.
+            if global_bg_median < 170 or local_bg < 170:
+                continue
+
+            # Check boundary gradient step (rectangular halo artifact from pasted text patch)
+            pad = 4
+            y0, y1 = max(0, y - pad), min(h, y + bh + pad)
+            x0, x1 = max(0, x - pad), min(w, x + bw + pad)
+            surrounding = gray[y0:y1, x0:x1]
+            if surrounding.size < 100:
+                continue
+
+            surr_grad_y = np.abs(cv2.Sobel(surrounding, cv2.CV_32F, 0, 1, ksize=3))
+            surr_grad_x = np.abs(cv2.Sobel(surrounding, cv2.CV_32F, 1, 0, ksize=3))
+            box_edge_strength = float(np.mean(surr_grad_y) + np.mean(surr_grad_x))
+
+            # Must have noticeable background shift on substrate AND perimeter step edge
+            if bg_diff > 28.0 and box_edge_strength > 35.0:
+                score = min(0.85, 0.40 + (bg_diff / 50.0) * 0.35)
+                region = _label_region((x + bw / 2) / w, (y + bh / 2) / h, doc_type)
+                if region.lower() in _STRUCTURAL_ZONES:
+                    score = min(score, 0.25)
+                drafts.append(
+                    ForensicDraft(
+                        region=region,
+                        finding_type="suspicious_text_replacement",
+                        severity=_severity(score),
+                        score=round(score, 2),
+                        bbox=[int(x), int(y), int(bw), int(bh)],
+                        explanation=(
+                            f"Suspicious text region detected in {region}: localized background luminance "
+                            f"divergence (Δ {bg_diff:.1f}) and boundary step-edge contrast around text block. "
+                            f"This is an indicator of potential manipulation, not proof."
+                        ),
+                    )
+                )
+
+        drafts.sort(key=lambda d: d.score, reverse=True)
+        return drafts[:3]
+    except Exception:
+        return []
+
+
 def analyze_image(
     image_bgr_or_gray: np.ndarray,
     doc_type: str | None = None,
@@ -604,6 +693,7 @@ def analyze_image(
     3. High-frequency sensor noise variance inconsistency.
     4. Copy-move / clone-stamp feature duplication.
     5. Image metadata / EXIF software editing signature audit.
+    6. Suspicious text replacement / patch detection.
     """
     h, w = image_bgr_or_gray.shape[:2]
     if h < 100 or w < 100:
@@ -663,7 +753,13 @@ def analyze_image(
         if all(_iou(draft.bbox, f.bbox) < 0.35 for f in findings):
             findings.append(draft)
 
-    # 5. Metadata / Software tamper detection
+    # 5. Suspicious text replacement
+    text_findings = _detect_suspicious_text_replacement(gray, doc_type)
+    for draft in text_findings:
+        if all(_iou(draft.bbox, f.bbox) < 0.3 for f in findings):
+            findings.append(draft)
+
+    # 6. Metadata / Software tamper detection
     meta_findings = _detect_metadata_tampering(file_path, w, h)
     findings.extend(meta_findings)
 

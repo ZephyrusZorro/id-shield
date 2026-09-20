@@ -117,9 +117,9 @@ function FaceCard({ face }: { face: FaceCropInfo }) {
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 p-2.5 text-center text-xs border border-slate-100 dark:border-slate-800/80">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-50 dark:bg-slate-900/60 p-2.5 text-center text-xs border border-slate-100 dark:border-slate-800/80">
+            <div className="min-w-0 px-1">
+              <p className="text-[9px] font-bold uppercase text-slate-500 dark:text-slate-400 truncate" title="Sharpness">
                 Sharpness
               </p>
               <p
@@ -134,16 +134,16 @@ function FaceCard({ face }: { face: FaceCropInfo }) {
                 {Math.round(face.sharpness)}
               </p>
             </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <div className="min-w-0 px-1">
+              <p className="text-[9px] font-bold uppercase text-slate-500 dark:text-slate-400 truncate" title="Brightness">
                 Brightness
               </p>
               <p className="mt-0.5 font-mono font-bold text-slate-900 dark:text-white">
                 {Math.round(face.brightness)}
               </p>
             </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <div className="min-w-0 px-1">
+              <p className="text-[9px] font-bold uppercase text-slate-500 dark:text-slate-400 truncate" title="Contrast">
                 Contrast
               </p>
               <p className="mt-0.5 font-mono font-bold text-slate-900 dark:text-white">
