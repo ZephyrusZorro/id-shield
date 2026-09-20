@@ -24,6 +24,7 @@ class UploadValidationError(ValueError):
 def sanitize_filename(name: str) -> str:
     """Return a filesystem-safe display name derived from the upload name."""
     name = unicodedata.normalize("NFKC", name)
+    name = name.replace("\\", "/")
     name = Path(name).name  # strip any path components
     name = _UNSAFE_CHARS.sub("_", name).strip(" ._")
     return name[:200] or "upload"
