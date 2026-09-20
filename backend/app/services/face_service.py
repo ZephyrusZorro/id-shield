@@ -44,6 +44,7 @@ class FaceCropResult:
     contrast: float  # Pixel std deviation
     crop_path: str | None = None  # Relative path to saved face crop PNG
     features: dict = field(default_factory=dict)
+    anti_spoofing: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -85,6 +86,71 @@ def _get_alt_cascade() -> cv2.CascadeClassifier | None:
     except Exception:
         pass
     return None
+
+
+def _get_eye_cascade() -> cv2.CascadeClassifier | None:
+    """Load Haar Cascade for eye detection to confirm human portrait landmarks."""
+    try:
+        cascade_path = cv2.data.haarcascades + "haarcascade_eye.xml"
+        cascade = cv2.CascadeClassifier(cascade_path)
+        if not cascade.empty():
+            return cascade
+    except Exception:
+        pass
+    return None
+
+
+def _box_iou(box_a, box_b) -> float:
+    xa, ya, wa, ha = int(box_a[0]), int(box_a[1]), int(box_a[2]), int(box_a[3])
+    xb, yb, wb, hb = int(box_b[0]), int(box_b[1]), int(box_b[2]), int(box_b[3])
+    ix = max(0, min(xa + wa, xb + wb) - max(xa, xb))
+    iy = max(0, min(ya + ha, yb + hb) - max(ya, yb))
+    inter = ix * iy
+    if inter <= 0:
+        return 0.0
+    union = (wa * ha) + (wb * hb) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _score_face_candidate(box, gray_image: np.ndarray, eye_cascade, color_image: np.ndarray | None = None) -> float:
+    """Score face candidates to reliably separate real portrait photos from background watermarks, emblems, and printed text."""
+    x, y, bw, bh = int(box[0]), int(box[1]), int(box[2]), int(box[3])
+    crop_gray = gray_image[y : y + bh, x : x + bw]
+    if crop_gray.size == 0:
+        return -999.0
+    contrast = float(crop_gray.std())
+    # Heavy penalty on washed-out faint watermarks/emblems (contrast < 22)
+    if contrast < 22.0:
+        return -500.0 + contrast
+
+    # Skin tone analysis: real document portraits contain human skin pigmentation
+    skin_score = 0.0
+    if color_image is not None and color_image.ndim == 3 and color_image.shape[2] == 3:
+        crop_bgr = color_image[y : y + bh, x : x + bw]
+        if crop_bgr.size > 0:
+            hsv = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2HSV)
+            h, s, v = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
+            skin_mask = (((h <= 25) | (h >= 170)) & (s >= 25) & (s <= 220) & (v >= 40))
+            skin_ratio = float(skin_mask.mean())
+            # Text / emblems have virtually no skin pixels (< 0.10)
+            if skin_ratio < 0.10:
+                return -400.0 + (skin_ratio * 100.0)
+            skin_score = skin_ratio * 160.0
+
+    upper = crop_gray[: int(bh * 0.65), :]
+    eyes = eye_cascade.detectMultiScale(upper, 1.1, 2) if eye_cascade is not None else []
+    eye_bonus = min(len(eyes), 2) * 25.0
+
+    img_h, img_w = gray_image.shape[:2]
+    size_ratio = bw / img_w
+    # Ideal document photo size is between 8% and 45% of document width
+    size_score = 30.0 if (0.08 <= size_ratio <= 0.45) else -20.0
+
+    # Dead center on Indian IDs is usually where watermark/emblem sits
+    center_dist_x = abs((x + bw / 2) - (img_w / 2)) / (img_w / 2)
+    pos_bonus = 15.0 if center_dist_x > 0.2 else 0.0
+
+    return skin_score + (contrast * 1.5) + eye_bonus + size_score + pos_bonus
 
 
 def _compute_lbp(gray: np.ndarray) -> np.ndarray:
@@ -148,34 +214,50 @@ def extract_face(
     h, w = image.shape[:2]
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
 
-    # 1. Try Cascade detection
+    # 1. Try Cascade detection across both default and alt cascades
+    all_candidates = []
     cascade = _get_face_cascade()
-    faces = []
     if cascade is not None:
-        faces = cascade.detectMultiScale(
+        c1_faces = cascade.detectMultiScale(
             gray,
             scaleFactor=1.08,
             minNeighbors=4,
             minSize=(int(w * 0.08), int(h * 0.08)),
         )
+        if len(c1_faces) > 0:
+            all_candidates.extend(list(c1_faces))
 
-    # 2. Try Alt Cascade if default found nothing
-    if len(faces) == 0:
-        alt_cascade = _get_alt_cascade()
-        if alt_cascade is not None:
-            faces = alt_cascade.detectMultiScale(
-                gray,
-                scaleFactor=1.05,
-                minNeighbors=3,
-                minSize=(int(w * 0.08), int(h * 0.08)),
-            )
+    alt_cascade = _get_alt_cascade()
+    if alt_cascade is not None:
+        c2_faces = alt_cascade.detectMultiScale(
+            gray,
+            scaleFactor=1.05,
+            minNeighbors=3,
+            minSize=(int(w * 0.08), int(h * 0.08)),
+        )
+        if len(c2_faces) > 0:
+            all_candidates.extend(list(c2_faces))
+
+    eye_cascade = _get_eye_cascade()
+
+    # Deduplicate candidate boxes using IOU
+    unique_candidates = []
+    for box in all_candidates:
+        b_tuple = (int(box[0]), int(box[1]), int(box[2]), int(box[3]))
+        if not any(_box_iou(b_tuple, u) > 0.4 for u in unique_candidates):
+            unique_candidates.append(b_tuple)
 
     detection_method = "cascade"
     best_box = None
 
-    if len(faces) > 0:
-        # Choose the largest detected face box
-        best_box = max(faces, key=lambda b: b[2] * b[3])
+    if unique_candidates:
+        # Prioritize candidates with genuine photo contrast (std >= 22.0) over faint watermarks
+        viable = [
+            b for b in unique_candidates
+            if float(gray[b[1] : b[1] + b[3], b[0] : b[0] + b[2]].std()) >= 22.0
+        ]
+        pool = viable if viable else unique_candidates
+        best_box = max(pool, key=lambda b: _score_face_candidate(b, gray, eye_cascade, color_image=image))
         x, y, fw, fh = int(best_box[0]), int(best_box[1]), int(best_box[2]), int(best_box[3])
         confidence = 0.90
     else:
@@ -238,6 +320,9 @@ def extract_face(
         except ValueError:
             crop_rel_path = str(crop_file)
 
+    # Compute anti-spoofing / presentation attack detection
+    anti_spoofing = _evaluate_anti_spoofing(face_crop, sharpness, contrast)
+
     return FaceCropResult(
         document_id=doc_id,
         file_name=file_name,
@@ -255,7 +340,79 @@ def extract_face(
             "lbp_hist": lbp_hist,
             "color_hist": color_hist_list,
         },
+        anti_spoofing=anti_spoofing,
     )
+
+
+def _evaluate_anti_spoofing(crop_bgr: np.ndarray, sharpness: float, contrast: float) -> dict:
+    """Analyze face crop for screen replay moiré patterns, specular glare, and capture quality."""
+    h, w = crop_bgr.shape[:2]
+    crop_gray = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2GRAY) if crop_bgr.ndim == 3 else crop_bgr
+    aligned = cv2.resize(crop_gray, (160, 160))
+
+    # 1. 2D Fast Fourier Transform for moiré / screen raster grid spikes
+    try:
+        f = np.fft.fft2(aligned.astype(np.float32))
+        fshift = np.fft.fftshift(f)
+        mag = np.log(np.abs(fshift) + 1.0)
+
+        cy, cx = 80, 80
+        Y, X = np.ogrid[:160, :160]
+        dist = np.sqrt((X - cx) ** 2 + (Y - cy) ** 2)
+        high_band = (dist >= 25) & (dist <= 75)
+        high_vals = mag[high_band]
+        peak = float(high_vals.max())
+        mean_val = float(high_vals.mean())
+        std_val = float(high_vals.std())
+        moire_intensity = float((peak - mean_val) / (std_val + 1e-5))
+    except Exception:
+        moire_intensity = 0.0
+
+    # 2. Specular glare / screen glass hotspot reflection
+    try:
+        if crop_bgr.ndim == 3:
+            hsv = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2HSV)
+            glare_mask = (hsv[:, :, 1] < 35) & (hsv[:, :, 2] > 245)
+            glare_ratio = float(glare_mask.sum() / max(1, h * w))
+        else:
+            glare_ratio = float((crop_gray > 250).sum() / max(1, h * w))
+    except Exception:
+        glare_ratio = 0.0
+
+    # 3. Status determination
+    if moire_intensity >= 4.6:
+        status = "potential_screen_replay"
+        risk_score = 75
+        explanation = (
+            f"High-frequency 2D spectral spikes detected (moiré intensity {moire_intensity:.1f}), "
+            f"characteristic of electronic screen subpixel grids or display replay."
+        )
+    elif glare_ratio >= 0.08:
+        status = "screen_or_glossy_replay"
+        risk_score = 65
+        explanation = (
+            f"Specular glare hotspot detected ({glare_ratio * 100:.1f}% area), "
+            f"typical of phone screen glass reflections or glossy re-photography."
+        )
+    elif sharpness < 25.0 or contrast < 20.0:
+        status = "low_quality_capture"
+        risk_score = 40
+        explanation = (
+            f"Suboptimal facial sharpness ({round(sharpness, 1)}) or contrast ({round(contrast, 1)}) "
+            f"impedes reliable biometric authentication."
+        )
+    else:
+        status = "genuine_photo"
+        risk_score = 10
+        explanation = "Natural optical micro-texture and continuous tone distribution detected."
+
+    return {
+        "status": status,
+        "risk_score": risk_score,
+        "moire_intensity": round(moire_intensity, 2),
+        "glare_ratio": round(glare_ratio, 3),
+        "explanation": explanation,
+    }
 
 
 def compare_two_faces(

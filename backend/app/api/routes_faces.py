@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.db.base import get_db
 from app.db.models import Case, Document
 from app.schemas.faces import (
+    AntiSpoofingInfo,
     CaseFacesResponse,
     FaceComparisonPair,
     FaceCropInfo,
@@ -62,6 +63,9 @@ def get_case_faces(case_id: str, db: Session = Depends(get_db)) -> CaseFacesResp
     faces_out: list[FaceCropInfo] = []
     for f in face_crops:
         crop_file = crops_dir / f"{f.document_id}_face.png"
+        anti_spoof_obj = None
+        if f.anti_spoofing:
+            anti_spoof_obj = AntiSpoofingInfo(**f.anti_spoofing)
         faces_out.append(
             FaceCropInfo(
                 document_id=f.document_id,
@@ -74,6 +78,7 @@ def get_case_faces(case_id: str, db: Session = Depends(get_db)) -> CaseFacesResp
                 brightness=f.brightness,
                 contrast=f.contrast,
                 has_crop=crop_file.is_file(),
+                anti_spoofing=anti_spoof_obj,
             )
         )
 

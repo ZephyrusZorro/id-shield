@@ -12,6 +12,10 @@ class ExtractedFieldItem(BaseModel):
     source_region: dict | None
 
 
+class DocumentTypeUpdate(BaseModel):
+    document_type: str
+
+
 class DocumentDetail(BaseModel):
     id: str
     case_id: str
@@ -20,6 +24,7 @@ class DocumentDetail(BaseModel):
     file_size: int
     document_type: str | None
     type_confidence: float | None
+    document_type_label: str | None = None
     processing_status: str
     has_preview: bool
     ocr_engine: str | None
@@ -27,3 +32,4 @@ class DocumentDetail(BaseModel):
     file_hash_prefix: str | None
     uploaded_at: datetime
     fields: list[ExtractedFieldItem]
+

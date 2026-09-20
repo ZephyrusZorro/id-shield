@@ -16,17 +16,23 @@ DOC_NUMBER_PATTERNS = {
     "passport": r"^[A-Z]{1,2}[0-9]{7,8}$",
     "national_id": r"^[A-Z]{2}-[0-9]{4}-[0-9]{4}$",
     "pan": r"^[A-Z]{5}[0-9]{4}[A-Z]$",
+    "aadhaar": r"^[2-9][0-9]{3}\s?[0-9]{4}\s?[0-9]{4}$",
+    "driving_licence": r"^[A-Z]{2}[-\s]?[0-9]{2}[-\s]?[0-9]{4}[-\s]?[0-9]{7}$|^[A-Z]{2}[0-9]{13,15}$",
+    "voter_id": r"^[A-Z]{3}[0-9]{7}$",
 }
 
 MANDATORY_FIELDS = {
     "passport": ("full_name", "date_of_birth", "document_number", "nationality", "expiry_date"),
     "national_id": ("full_name", "date_of_birth", "document_number"),
     "pan": ("full_name", "date_of_birth", "document_number"),
+    "aadhaar": ("full_name", "date_of_birth", "document_number"),
     "driving_licence": ("full_name", "date_of_birth", "document_number"),
+    "voter_id": ("full_name", "document_number"),
     "visa": ("full_name", "document_number"),
     "address_proof": ("full_name",),
     "certificate": (),
     "other": (),
+    "unknown": (),
 }
 
 
@@ -53,13 +59,18 @@ def validate_document(
     ocr_full_text: str | None,
 ) -> list[ValidationDraft]:
     results: list[ValidationDraft] = []
-    dtype = (document_type or "other").replace(" ", "_")
+    dtype = (document_type or "other").replace(" ", "_").lower()
 
     # 1. Document type recognized
-    if document_type and dtype != "other":
+    if document_type and dtype not in ("other", "unknown"):
         results.append(
             ValidationDraft("Document type recognized", "pass",
                              f"Detected type: {dtype.replace('_', ' ')}.")
+        )
+    elif dtype == "unknown":
+        results.append(
+            ValidationDraft("Document type recognized", "warning",
+                            "Type is currently marked as unknown / unclassified. Manual verification or correction recommended.")
         )
     else:
         results.append(

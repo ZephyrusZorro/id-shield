@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { Loader2, ShieldAlert, ShieldCheck, Info } from "lucide-react";
 import { useApi } from "../../hooks/useApi";
 import { DocImage } from "./DocImage";
@@ -130,9 +130,24 @@ function DocumentCard({ report }: { report: DocumentForensicsReport }) {
                   <p className="mt-1 text-xs leading-relaxed text-slate-700 dark:text-slate-300 font-medium">
                     {f.explanation}
                   </p>
-                  <p className="mt-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    {f.finding_type.replace(/_/g, " ")} · Suspicion score: {Math.round(f.score * 100)}/100
-                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                      f.finding_type === "copy_move_anomaly"
+                        ? "bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                        : f.finding_type === "metadata_tamper_indicator"
+                          ? "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                          : f.finding_type === "noise_variance_anomaly"
+                            ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800"
+                            : f.finding_type === "compression_anomaly"
+                              ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                              : "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                    }`}>
+                      {f.finding_type.replace(/_/g, " ")}
+                    </span>
+                    <span className="text-[10px] font-mono font-semibold text-slate-500 dark:text-slate-400">
+                      Score: {Math.round(f.score * 100)}/100
+                    </span>
+                  </div>
                 </li>
               ))}
             </ul>

@@ -70,8 +70,9 @@ def _reset_previous_analysis(db: Session, case: Case) -> None:
     case.recommendation = None
     for doc in case.documents:
         db.execute(delete(ForensicFinding).where(ForensicFinding.document_id == doc.id))
-        doc.document_type = None
-        doc.type_confidence = None
+        if doc.type_confidence != 1.0:
+            doc.document_type = None
+            doc.type_confidence = None
         doc.processed_path = None
         doc.ocr_engine = None
         doc.ocr_mean_confidence = None
@@ -108,12 +109,42 @@ def _run_stage(db: Session, stage_row: AnalysisStage, fn, ctx: StageContext, doc
 
 
 def _stage_preprocess(db: Session, docs: list[Document], ctx: StageContext) -> dict | None:
+    from app.services.preprocessing_service import assess_image_quality
+
     failures: list[str] = []
+    quality_warnings: list[str] = []
     for doc in docs:
         src = settings.upload_dir / doc.original_path
         out = src.with_name(src.stem + "_processed.png")
         try:
             image = load_image(src)
+            # Evaluate image quality (Module 2: Blur, Resolution, Glare)
+            quality = assess_image_quality(image)
+            db.execute(
+                delete(ValidationResult).where(
+                    ValidationResult.document_id == doc.id,
+                    ValidationResult.check_type == "Image quality check",
+                )
+            )
+            db.add(
+                ValidationResult(
+                    document_id=doc.id,
+                    check_type="Image quality check",
+                    status=quality["status"],
+                    message=quality["message"],
+                    evidence={
+                        "sharpness": quality["sharpness"],
+                        "sharpness_status": quality["sharpness_status"],
+                        "resolution": quality["resolution"],
+                        "resolution_status": quality["resolution_status"],
+                        "glare_percentage": quality["glare_percentage"],
+                        "trust_ocr": quality["trust_ocr"],
+                    },
+                )
+            )
+            if quality["status"] in ("fail", "warning"):
+                quality_warnings.append(f"{doc.file_name}: {quality['message']}")
+
             meta = preprocess(image, out)
             ctx.processed[doc.id] = out
             doc.processed_path = str(out.relative_to(settings.upload_dir))
@@ -122,6 +153,8 @@ def _stage_preprocess(db: Session, docs: list[Document], ctx: StageContext) -> d
             failures.append(f"{doc.file_name}: {exc}")
     if failures:
         return {"warning": True, "message": "; ".join(failures)[:400]}
+    if quality_warnings:
+        return {"warning": True, "message": "; ".join(quality_warnings)[:400]}
     return None
 
 
@@ -151,6 +184,10 @@ def _stage_classify(db: Session, docs: list[Document], ctx: StageContext) -> dic
 
     unknown: list[str] = []
     for doc in docs:
+        if doc.document_type and doc.type_confidence == 1.0:
+            log_stage(log, "DOCUMENT_CLASSIFIED_USER_MANUAL", doc_id=doc.id, type=doc.document_type)
+            continue
+
         aspect = None
         processed = ctx.processed.get(doc.id)
         if processed is not None:
@@ -158,16 +195,16 @@ def _stage_classify(db: Session, docs: list[Document], ctx: StageContext) -> dic
             aspect = round(image.shape[1] / image.shape[0], 2)
         ocr = ctx.ocr_text.get(doc.id)
         text = ocr.full_text if ocr is not None else ""
-        type_name, label, conf = classifier_service.classify_document(text, aspect)
+        type_name, label, conf = classifier_service.classify_document(text, aspect, default_uncertain="unknown")
         doc.document_type = type_name
         doc.type_confidence = conf
         log_stage(log, "DOCUMENT_CLASSIFIED", doc_id=doc.id, type=type_name, conf=conf)
-        if type_name == "other":
+        if type_name in ("unknown", "other"):
             unknown.append(doc.file_name)
     if unknown:
         return {
             "warning": True,
-            "message": f"Type not confidently identified: {', '.join(unknown)}",
+            "message": f"Type not confidently identified (marked as unknown): {', '.join(unknown)}",
         }
     return None
 
@@ -215,8 +252,8 @@ def _stage_validate(db: Session, docs: list[Document], ctx: StageContext) -> dic
         drafts = validation_service.validate_document(
             doc.document_type, fields_map, ocr.full_text if ocr is not None else None
         )
-        # Preserve rows owned by other stages (QR cross-check, duplicates).
-        preserved = {"Duplicate / reuse"}
+        # Preserve rows owned by other stages (QR cross-check, duplicates, quality, faces).
+        preserved = {"Duplicate / reuse", "Image quality check", "Face photo extraction"}
         old_rows = db.scalars(
             select(ValidationResult).where(ValidationResult.document_id == doc.id)
         ).all()
@@ -250,7 +287,8 @@ def _stage_validate(db: Session, docs: list[Document], ctx: StageContext) -> dic
 
 
 def _stage_consistency(db: Session, docs: list[Document], ctx: StageContext) -> dict | None:
-    from app.services import consistency_service
+    from app.services import consistency_service, rule_engine
+
 
     db.execute(delete(CrossDocumentFinding).where(CrossDocumentFinding.case_id == docs[0].case_id))
 
@@ -280,20 +318,49 @@ def _stage_consistency(db: Session, docs: list[Document], ctx: StageContext) -> 
                 explanation=f.explanation,
             )
         )
+
+    # Evaluate custom verification rules across documents
+    docs_for_rules = [
+        {
+            "document_id": d.document_id,
+            "file_name": d.file_name,
+            "fields": d.fields,
+            "document_type": d.document_type,
+        }
+        for d in doc_values
+    ]
+    rule_results = rule_engine.run_custom_rule_engine(docs_for_rules)
+    for r in rule_results:
+        if r.status in ("fail", "warning"):
+            db.add(
+                CrossDocumentFinding(
+                    case_id=docs[0].case_id,
+                    field_name=r.rule_id,
+                    severity=r.severity,
+                    documents_involved=[{"rule": r.rule_name, "evidence": r.evidence}],
+                    values={},
+                    explanation=r.explanation,
+                )
+            )
+
     log_stage(log, "CONSISTENCY_CHECK_COMPLETED", case_id=docs[0].case_id, findings=len(findings))
 
     conflicts = [f for f in findings if f.severity in ("medium", "high")]
-    if len(docs) < 2:
+    rule_conflicts = [r for r in rule_results if r.status in ("fail", "warning") and r.severity in ("medium", "high")]
+
+    if len(docs) < 2 and not rule_conflicts:
         return {"message": "Single-document case — cross-document check not applicable."}
-    if conflicts:
+    if conflicts or rule_conflicts:
+        reasons = sorted({c.field_name for c in conflicts} | {r.rule_name for r in rule_conflicts})
         return {
             "warning": True,
             "message": (
-                f"{len(conflicts)} inconsistency(ies) detected across documents: "
-                + ", ".join(sorted({c.field_name for c in conflicts}))
+                f"{len(conflicts) + len(rule_conflicts)} inconsistency(ies) / rule violations detected: "
+                + ", ".join(reasons)
             ),
         }
-    return {"message": "All shared fields are consistent across documents."}
+    return {"message": "All shared fields and verification rules passed successfully."}
+
 
 
 def _stage_forensics(db: Session, docs: list[Document], ctx: StageContext) -> dict | None:
@@ -308,7 +375,7 @@ def _stage_forensics(db: Session, docs: list[Document], ctx: StageContext) -> di
         db.execute(delete(ForensicFinding).where(ForensicFinding.document_id == doc.id))
         try:
             image = load_image(src)
-            drafts = forensic_service.analyze_image(image, doc.document_type)
+            drafts = forensic_service.analyze_image(image, doc.document_type, file_path=src)
         except Exception as exc:  # noqa: BLE001 - per-doc isolation
             log.warning("FORENSICS_FAILED | doc_id=%s err=%s", doc.id, exc)
             continue

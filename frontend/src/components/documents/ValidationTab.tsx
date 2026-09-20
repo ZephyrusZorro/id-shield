@@ -1,4 +1,4 @@
-﻿import { CheckCircle2, XCircle, AlertTriangle, MinusCircle, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, MinusCircle, Loader2 } from "lucide-react";
 import { useApi } from "../../hooks/useApi";
 import type {
   CaseValidationsResponse,
@@ -53,25 +53,53 @@ function DocumentCard({ report }: { report: DocumentValidationReport }) {
         <p className="text-xs text-slate-400 dark:text-slate-500">No validation checks recorded.</p>
       ) : (
         <ul className="space-y-2.5">
-          {report.items.map((item, i) => (
-            <li key={`${i}-${item.check_type}-${item.message}`} className="flex items-start gap-2.5 rounded-lg p-2 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
-              <span className="mt-0.5"><CheckIcon status={item.status} /></span>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-slate-900 dark:text-white">{item.check_type}</p>
-                <p
-                  className={`mt-0.5 text-xs leading-relaxed ${
-                    item.status === "fail"
-                      ? "text-rose-600 dark:text-rose-400 font-semibold"
-                      : item.status === "warning"
-                        ? "text-amber-700 dark:text-amber-400 font-medium"
-                        : "text-slate-600 dark:text-slate-300"
-                  }`}
-                >
-                  {item.message}
-                </p>
-              </div>
-            </li>
-          ))}
+          {report.items.map((item, i) => {
+            const isQualityCheck = item.check_type === "Image quality check";
+            const isPoorQuality = isQualityCheck && item.status !== "pass";
+
+            return (
+              <li
+                key={`${i}-${item.check_type}-${item.message}`}
+                className={`flex items-start gap-2.5 rounded-lg p-2.5 transition-colors ${
+                  isPoorQuality
+                    ? "bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800"
+                    : "hover:bg-slate-50/70 dark:hover:bg-slate-800/40"
+                }`}
+              >
+                <span className="mt-0.5">
+                  <CheckIcon status={item.status} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">
+                      {item.check_type}
+                    </p>
+                    {isQualityCheck && (
+                      <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold text-blue-600 dark:bg-blue-950 dark:text-blue-300">
+                        Workflow Module 2
+                      </span>
+                    )}
+                  </div>
+                  <p
+                    className={`mt-0.5 text-xs leading-relaxed ${
+                      item.status === "fail"
+                        ? "text-rose-600 dark:text-rose-400 font-semibold"
+                        : item.status === "warning"
+                          ? "text-amber-700 dark:text-amber-400 font-medium"
+                          : "text-slate-600 dark:text-slate-300"
+                    }`}
+                  >
+                    {item.message}
+                  </p>
+                  {isPoorQuality && (
+                    <p className="mt-1.5 inline-flex items-center gap-1 rounded bg-amber-100/80 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
+                      <AlertTriangle size={12} /> Guardrail: OCR extracted text marked unverified due to image clarity issues.
+                    </p>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

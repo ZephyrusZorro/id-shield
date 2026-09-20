@@ -10,13 +10,14 @@ from app.schemas.cases import (
     CaseCreate,
     CaseCreated,
     CaseOut,
+    CaseReviewRequest,
     DeleteResult,
     DocumentOut,
     UploadResult,
 )
-from app.core.security import UploadValidationError
-from app.db.models import Document
+from app.schemas.documents import DocumentTypeUpdate
 from app.services import case_service, upload_service
+
 
 router = APIRouter()
 
@@ -157,3 +158,65 @@ def delete_document(document_id: str, db: Session = Depends(get_db)) -> DeleteRe
         raise HTTPException(status_code=404, detail="Document not found.")
     upload_service.delete_document(db, doc)
     return DeleteResult(deleted=True)
+
+
+@router.patch("/documents/{document_id}/type", response_model=DocumentOut)
+@router.patch("/cases/{case_id}/documents/{document_id}/type", response_model=DocumentOut)
+def update_document_type(
+    document_id: str,
+    payload: DocumentTypeUpdate,
+    case_id: str | None = None,
+    db: Session = Depends(get_db),
+) -> DocumentOut:
+    """Allow user/system to correct or override document type."""
+    doc = db.get(Document, document_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    if case_id and doc.case_id != case_id:
+        raise HTTPException(status_code=404, detail="Document does not belong to specified case.")
+
+    clean_type = payload.document_type.strip().lower().replace(" ", "_")
+    doc.document_type = clean_type
+    doc.type_confidence = 1.0  # Explicit manual override
+    db.commit()
+    db.refresh(doc)
+    return DocumentOut.from_model(doc)
+
+
+@router.post("/cases/{case_id}/review", response_model=CaseOut)
+def submit_case_review(
+    case_id: str,
+    payload: CaseReviewRequest,
+    db: Session = Depends(get_db),
+) -> CaseOut:
+    """Record an official human verifier decision (approved, rejected, needs_further_review)."""
+    from datetime import datetime, timezone
+    from app.core.logging import get_logger
+    log = get_logger("idshield.cases")
+
+    case = case_service.get_case(db, case_id)
+    if case is None:
+        raise HTTPException(status_code=404, detail="Case not found.")
+
+    valid_decisions = {"approved", "rejected", "needs_further_review", "pending_review"}
+    clean_decision = payload.decision.strip().lower()
+    if clean_decision not in valid_decisions:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid decision '{payload.decision}'. Must be one of: {sorted(valid_decisions)}",
+        )
+
+    case.review_status = clean_decision
+    case.reviewer_name = payload.reviewer_name or "Verification Officer"
+    case.reviewer_notes = payload.notes or ""
+    case.reviewed_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(case)
+
+    log.info(
+        "CASE_REVIEW_RECORDED | case_id=%s decision=%s reviewer=%s",
+        case.id, clean_decision, case.reviewer_name,
+    )
+    return CaseOut.from_model(case)
+
+

@@ -37,6 +37,8 @@ _FIELD_LABELS = {
     "issue_date": "Date of Issue",
     "expiry_date": "Date of Expiry",
     "address": "Address",
+    "father_name": "Father's / Guardian's Name",
+    "pincode": "Postal / PIN Code",
     "facial_photo": "Facial Photo",
 }
 
@@ -46,9 +48,11 @@ FIELD_SEVERITY = {
     "date_of_birth": "high",
     "document_number": "high",
     "facial_photo": "high",
+    "father_name": "high",
     "address": "medium",
     "gender": "medium",
     "nationality": "medium",
+    "pincode": "medium",
 }
 
 # Fields that are only meaningful between documents of the SAME type:
@@ -71,7 +75,7 @@ def _addresses_match(a: str, b: str) -> bool:
 
 def values_agree(field_name: str, a: str, b: str) -> bool:
     """Field-appropriate equivalence for normalized values."""
-    if field_name == "full_name":
+    if field_name in ("full_name", "father_name"):
         return names_match(a, b)
     if field_name == "address":
         return _addresses_match(a, b)
@@ -81,6 +85,7 @@ def values_agree(field_name: str, a: str, b: str) -> bool:
             return da == db
         return a.strip() == b.strip()
     return a.strip().upper() == b.strip().upper()
+
 
 
 def _group_documents(field_name: str, docs: list[DocumentValues]) -> list[list[DocumentValues]]:

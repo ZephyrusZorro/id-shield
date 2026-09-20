@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CloudUpload,
@@ -20,15 +20,18 @@ const MAX_MB = 10;
 const MAX_BYTES = MAX_MB * 1024 * 1024;
 
 const DOC_CATEGORIES = [
-  "Passport",
-  "National ID",
-  "PAN-like Document",
+  "Aadhaar Card",
+  "PAN Card",
   "Driving Licence",
+  "Passport",
+  "Voter ID (EPIC)",
+  "National ID",
   "Address Proof",
   "Visa",
   "Certificate",
-  "Other Identity Document",
+  "Other / Unknown",
 ];
+
 
 interface PendingFile {
   key: string;

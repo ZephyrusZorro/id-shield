@@ -91,4 +91,23 @@ def compare_with_fields(payloads: list[dict], fields: dict[str, str]) -> list[di
             }
         )
 
+    qr_dobs = [str(p.get("dob") or p.get("date_of_birth", "")).strip() for p in payloads if p.get("dob") or p.get("date_of_birth")]
+    printed_dob = fields.get("date_of_birth") or ""
+    if qr_dobs and printed_dob:
+        from app.utils.normalize import normalize_date_str
+        norm_printed = normalize_date_str(printed_dob)
+        match = any((normalize_date_str(qd) or qd) == norm_printed for qd in qr_dobs)
+        rows.append(
+            {
+                "check_type": "QR payload vs date of birth",
+                "status": "pass" if match else "fail",
+                "message": (
+                    f"Date of Birth on QR payload matches printed DOB ({printed_dob})."
+                    if match
+                    else f"QR/DOB mismatch: QR encodes {', '.join(qr_dobs)} but printed reads '{printed_dob}'."
+                ),
+                "evidence": {"qr": qr_dobs, "printed": printed_dob},
+            }
+        )
+
     return rows
