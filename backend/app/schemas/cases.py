@@ -19,11 +19,14 @@ class DocumentOut(BaseModel):
     file_size: int
     document_type: str | None
     type_confidence: float | None
+    document_type_label: str | None = None
     processing_status: str
     has_preview: bool
 
     @classmethod
     def from_model(cls, doc) -> "DocumentOut":
+        from app.services.classifier_service import get_document_label
+
         return cls(
             id=doc.id,
             file_name=doc.file_name,
@@ -31,9 +34,11 @@ class DocumentOut(BaseModel):
             file_size=doc.file_size,
             document_type=doc.document_type,
             type_confidence=doc.type_confidence,
+            document_type_label=get_document_label(doc.document_type) if doc.document_type else None,
             processing_status=doc.processing_status,
             has_preview=doc.mime_type.startswith("image/"),
         )
+
 
 
 class CaseOut(BaseModel):
@@ -48,6 +53,10 @@ class CaseOut(BaseModel):
     applicant_phone: str | None = None
     applicant_email: str | None = None
     auto_notify_on_mismatch: bool = False
+    review_status: str | None = "pending_review"
+    reviewer_name: str | None = None
+    reviewer_notes: str | None = None
+    reviewed_at: datetime | None = None
     document_count: int
     created_at: datetime
     documents: list[DocumentOut] | None = None
@@ -66,6 +75,10 @@ class CaseOut(BaseModel):
             applicant_phone=getattr(case, "applicant_phone", None),
             applicant_email=getattr(case, "applicant_email", None),
             auto_notify_on_mismatch=bool(getattr(case, "auto_notify_on_mismatch", False)),
+            review_status=getattr(case, "review_status", "pending_review") or "pending_review",
+            reviewer_name=getattr(case, "reviewer_name", None),
+            reviewer_notes=getattr(case, "reviewer_notes", None),
+            reviewed_at=getattr(case, "reviewed_at", None),
             document_count=len(case.documents),
             created_at=case.created_at,
             documents=[DocumentOut.from_model(d) for d in case.documents] if include_documents else None,
@@ -83,6 +96,12 @@ class CaseCreated(BaseModel):
     auto_notify_on_mismatch: bool = False
 
 
+class CaseReviewRequest(BaseModel):
+    decision: str = Field(description="approved | rejected | needs_further_review")
+    notes: str | None = None
+    reviewer_name: str | None = None
+
+
 class UploadResult(BaseModel):
     case_id: str
     uploaded: list[DocumentOut]
@@ -91,3 +110,4 @@ class UploadResult(BaseModel):
 
 class DeleteResult(BaseModel):
     deleted: bool
+

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { ApiStatus } from "./ApiStatus";
@@ -6,6 +6,7 @@ import { MobileDrawer } from "./MobileDrawer";
 import { CalendarDays, Menu, Moon, ShieldCheck, Sun, Search, Command } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext";
 import { CommandPalette } from "../common/CommandPalette";
+import { VoiceAssistantWidget } from "../common/VoiceAssistantWidget";
 
 const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/dashboard": {
@@ -168,6 +169,7 @@ export function AppLayout() {
         </footer>
       </div>
 
+      <VoiceAssistantWidget />
       <CommandPalette isOpen={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
       <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>

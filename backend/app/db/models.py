@@ -45,6 +45,11 @@ class Case(Base, TimestampMixin):
     applicant_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     applicant_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     auto_notify_on_mismatch: Mapped[bool] = mapped_column(Boolean, default=False)
+    review_status: Mapped[str] = mapped_column(String(30), default="pending_review")
+    # pending_review | approved | rejected | needs_further_review
+    reviewer_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    reviewer_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     documents: Mapped[list["Document"]] = relationship(
         back_populates="case", cascade="all, delete-orphan"

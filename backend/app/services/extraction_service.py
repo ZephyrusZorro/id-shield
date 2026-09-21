@@ -43,7 +43,27 @@ FIELD_SPECS: list[FieldSpec] = [
     FieldSpec("issue_date", ("date of issue", "issue date", "issued on"), "date"),
     FieldSpec("expiry_date", ("date of expiry", "expiry date", "expires on", "valid until", "valid till"), "date"),
     FieldSpec("address", ("address", "residing at"), "address", multiline=True),
+    FieldSpec(
+        "father_name",
+        (
+            "father's name",
+            "father name",
+            "fathers name",
+            "father",
+            "guardian's name",
+            "guardian name",
+            "husband's name",
+            "husband name",
+            "s/o",
+            "d/o",
+            "w/o",
+        ),
+        "name",
+        multiline=True,
+    ),
+    FieldSpec("pincode", ("pincode", "pin code", "postal code", "zip code", "pin"), "text"),
 ]
+
 
 # Direct full-name labels (checked only when no surname/given-name parts
 # exist). Multiline so letter-style docs with the value on the next line work.
