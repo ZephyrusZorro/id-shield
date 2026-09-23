@@ -6,6 +6,7 @@
 export interface SpeechOptions {
   rate?: number; // Default 0.88 for elderly comprehension
   pitch?: number;
+  lang?: string;
   onStart?: () => void;
   onEnd?: () => void;
   onError?: (err: any) => void;
@@ -102,12 +103,11 @@ export function speakText(text: string, options: SpeechOptions = {}): void {
   utterance.rate = options.rate ?? 0.88;
   utterance.pitch = options.pitch ?? 1.0;
 
-  // Select the highest quality natural English voice available
+  const targetLang = options.lang || "en";
   const voices = window.speechSynthesis.getVoices();
   const preferredVoice =
-    voices.find((v) => v.lang.startsWith("en") && (v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("Online"))) ||
-    voices.find((v) => v.lang.startsWith("en-US") || v.lang.startsWith("en-IN") || v.lang.startsWith("en-GB")) ||
-    voices.find((v) => v.lang.startsWith("en"));
+    voices.find((v) => v.lang.startsWith(targetLang) && (v.name.includes("Natural") || v.name.includes("Google") || v.name.includes("Online"))) ||
+    voices.find((v) => v.lang.startsWith(targetLang));
 
   if (preferredVoice) {
     utterance.voice = preferredVoice;
