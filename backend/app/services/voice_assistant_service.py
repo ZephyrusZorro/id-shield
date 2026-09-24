@@ -301,6 +301,22 @@ def answer_system_query(query: str, current_path: str | None = None) -> dict[str
             "category": "navigate",
         }
 
+    words = set(q.split())
+
+    if any(phrase in q for phrase in ["what is id shield", "about id shield", "who are you", "what is this platform"]) or ("what" in words and "idshield" in words):
+        return {
+            "answer": "ID-SHIELD is an explainable identity and document forensics platform. It uses multi-modal OCR, error level analysis, biometric face cross-matching, and cross-document validation to detect fraud and assist human verifiers.",
+            "action": None,
+            "category": "about",
+        }
+
+    if bool(words & {"hello", "hi", "hey"}) or any(phrase in q for phrase in ["good morning", "good afternoon", "good evening"]):
+        return {
+            "answer": "Hello! I am your ID-SHIELD voice assistant. How can I help you today? You can ask me to navigate pages, explain the system, or summarize any case.",
+            "action": None,
+            "category": "greeting",
+        }
+
     if any(k in q for k in ["help", "what can you do", "how to use", "assist"]):
         return {
             "answer": "Welcome to ID-SHIELD. I am your accessible voice assistant. You can speak or type commands like 'Go to dashboard', 'Upload documents', 'Show history', or select any identity case to ask detailed questions about applicant verification and fraud detection.",

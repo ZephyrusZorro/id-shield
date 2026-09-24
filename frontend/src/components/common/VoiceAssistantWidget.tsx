@@ -21,6 +21,7 @@ import {
   startListening,
   isSpeechSupported,
   playChime,
+  requestMicrophonePermission,
 } from "../../utils/voiceAssistant";
 import type { VoiceBriefResponse, VoiceQueryResponse } from "../../types/api";
 
@@ -102,16 +103,20 @@ export function VoiceAssistantWidget() {
     };
     window.addEventListener("idshield:voice-speak-brief", handleVoiceSpeakBrief);
     return () => window.removeEventListener("idshield:voice-speak-brief", handleVoiceSpeakBrief);
-  }, [voiceBrief, currentCaseId, currentRate]);
+  }, [voiceBrief, currentCaseId, currentRate, selectedLang]);
 
   // Execute oral speech with captions
   const speakWithCaptions = (text: string, onDone?: () => void) => {
-    if (!isSpeechSupported()) return;
+    if (!isSpeechSupported()) {
+      setSpokenSubtitle(text);
+      return;
+    }
     setIsSpeaking(true);
     setSpokenSubtitle(text);
 
     speakText(text, {
       rate: currentRate,
+      lang: selectedLang,
       onStart: () => setIsSpeaking(true),
       onEnd: () => {
         setIsSpeaking(false);
@@ -196,7 +201,7 @@ export function VoiceAssistantWidget() {
   };
 
   // Toggle voice recognition
-  const toggleListening = () => {
+  const toggleListening = async () => {
     if (isListening) {
       activeListenerRef.current?.stop();
       setIsListening(false);
@@ -207,6 +212,13 @@ export function VoiceAssistantWidget() {
     if (isSpeaking) {
       stopSpeaking();
       setIsSpeaking(false);
+    }
+
+    const hasMic = await requestMicrophonePermission();
+    if (!hasMic) {
+      playChime("error");
+      setTranscript("Microphone permission was denied. You can type your question in the box below!");
+      return;
     }
 
     const listener = startListening({
@@ -235,7 +247,7 @@ export function VoiceAssistantWidget() {
     if (listener) {
       activeListenerRef.current = listener;
     } else {
-      alert("Voice recognition is not supported in this browser. Please use Chrome, Edge, or Safari, or type your question below.");
+      setTranscript("Voice recognition is not supported in this browser. Please type your question below.");
     }
   };
 
